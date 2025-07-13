@@ -5,6 +5,7 @@ import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.decompose.router.stack.ChildStack
 import com.arkivanov.decompose.router.stack.StackNavigation
 import com.arkivanov.decompose.router.stack.childStack
+import com.arkivanov.decompose.router.stack.pop
 import com.arkivanov.decompose.router.stack.push
 import com.arkivanov.decompose.value.Value
 import kotlinx.serialization.Serializable
@@ -32,12 +33,21 @@ class RootComponent(
                     }
                 )
             )
-            is Config.Login -> Child.Login(
-                LoginComponent(
-                    componentContext = context,
-                    role = config.role
-                )
+                    is Config.Login -> Child.Login(
+            LoginComponent(
+                componentContext = context,
+                role = config.role,
+                onNavigateBack = { navigation.pop() },
+                onNavigateToSignup = { navigation.push(Config.Signup) }
             )
+        )
+        is Config.Signup -> Child.Signup(
+            SignupComponent(
+                componentContext = context,
+                onNavigateBack = { navigation.pop() },
+                onNavigateToLogin = { navigation.pop() }
+            )
+        )
         }
 
     @Serializable
@@ -46,10 +56,13 @@ class RootComponent(
         object Dashboard : Config()
         @Serializable
         data class Login(val role: String) : Config()
+        @Serializable
+        object Signup : Config()
     }
 
     sealed class Child {
         data class Dashboard(val component: DashboardComponent) : Child()
         data class Login(val component: LoginComponent) : Child()
+        data class Signup(val component: SignupComponent) : Child()
     }
 }

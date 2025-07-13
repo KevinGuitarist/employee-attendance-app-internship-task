@@ -53,13 +53,14 @@ fun DashboardSection(component: DashboardComponent) {
         // Role Selection
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.Top
         ) {
             Text(
                 text = "Select Your Role",
                 fontSize = 20.sp,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 20.dp)
             )
 
             Button(
@@ -71,6 +72,8 @@ fun DashboardSection(component: DashboardComponent) {
             ) {
                 Text(text = "Admin", color = Color.White)
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             OutlinedButton(  // Use OutlinedButton for the second button
                 onClick = component::onEmployeeClick,
