@@ -12,10 +12,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import employeeattendanceapp.composeapp.generated.resources.Res
 import employeeattendanceapp.composeapp.generated.resources.logo
+import org.example.employeeattendenceapp.Navigation.DashboardComponent
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
-fun RoleSelectionScreen() {
+fun DashboardSection(component: DashboardComponent) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -62,7 +63,7 @@ fun RoleSelectionScreen() {
             )
 
             Button(
-                onClick = { /*TODO*/ },
+                onClick = component::onAdminClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 32.dp),
@@ -72,7 +73,7 @@ fun RoleSelectionScreen() {
             }
 
             OutlinedButton(  // Use OutlinedButton for the second button
-                onClick = { /*TODO*/ },
+                onClick = component::onEmployeeClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 32.dp)

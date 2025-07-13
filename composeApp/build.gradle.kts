@@ -10,6 +10,9 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
+
+    // Kotlin Serialization Plugin
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -70,6 +73,13 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodel)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(projects.shared)
+
+            //Decompose
+            implementation(libs.decompose)
+            implementation(libs.decompose.extensions.compose)
+
+            // material icons, we need arrow back icon for navigation button
+            implementation(compose.materialIconsExtended)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

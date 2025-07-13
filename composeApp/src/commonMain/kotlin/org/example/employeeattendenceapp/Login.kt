@@ -14,10 +14,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import employeeattendanceapp.composeapp.generated.resources.Res
 import employeeattendanceapp.composeapp.generated.resources.logo
+import org.example.employeeattendenceapp.Navigation.LoginComponent
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
-fun LoginScreen( ) {
+fun LoginScreen(component: LoginComponent) {
     Column(
         modifier = Modifier
             .fillMaxSize()
