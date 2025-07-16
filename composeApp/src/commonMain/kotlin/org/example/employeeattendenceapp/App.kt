@@ -4,9 +4,6 @@ import androidx.compose.runtime.*
 import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.decompose.extensions.compose.stack.Children
 import com.arkivanov.essenty.lifecycle.LifecycleRegistry
-import org.example.employeeattendenceapp.DashboardSection
-import org.example.employeeattendenceapp.LoginScreen
-import org.example.employeeattendenceapp.SignUp
 import org.example.employeeattendenceapp.Navigation.RootComponent
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -32,6 +29,4 @@ fun App() {
                 SignUp(component = instance.component)
         }
     }
-
-    //LoginScreen()
 }

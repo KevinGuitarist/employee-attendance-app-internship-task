@@ -13,6 +13,8 @@ plugins {
 
     // Kotlin Serialization Plugin
     alias(libs.plugins.kotlinSerialization)
+
+    id("com.google.gms.google-services")
 }
 
 kotlin {
@@ -62,6 +64,14 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+
+            implementation(libs.firebase.config)
+
+            // material icons, we need arrow back icon for navigation button
+            implementation(compose.materialIconsExtended)
+
+            implementation(project.dependencies.platform("com.google.firebase:firebase-bom:32.7.2"))
+            implementation(libs.firebase.auth.ktx)
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -78,7 +88,6 @@ kotlin {
             implementation(libs.decompose)
             implementation(libs.decompose.extensions.compose)
 
-            // material icons, we need arrow back icon for navigation button
             implementation(compose.materialIconsExtended)
         }
         commonTest.dependencies {
