@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import employeeattendanceapp.composeapp.generated.resources.Res
 import employeeattendanceapp.composeapp.generated.resources.logo
+import org.example.employeeattendenceapp.Auth.signUpWithEmailPassword
 import org.example.employeeattendenceapp.Navigation.SignupComponent
 import org.jetbrains.compose.resources.painterResource
 
@@ -137,14 +138,22 @@ fun SignUp(component: SignupComponent) {
 
                 // Sign Up Button
                 Button(
-                    onClick = { /*TODO*/ },
+                    onClick = {
+                        signUpWithEmailPassword(
+                            email = emailValue.text,
+                            password = passwordValue.text,
+                            onSuccess = { /* show success snackbar or navigate */ },
+                            onError = { message -> /* show error snackbar or log it */ }
+                        )
+
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Sign Up", color = Color.White)
+                        Text("Sign Up", color = Color.White)
                 }
 
                 // Already have an account?

@@ -72,6 +72,8 @@ kotlin {
 
             implementation(project.dependencies.platform("com.google.firebase:firebase-bom:32.7.2"))
             implementation(libs.firebase.auth.ktx)
+            implementation(libs.firebase.analytics)
+
         }
         commonMain.dependencies {
             implementation(compose.runtime)

@@ -25,6 +25,7 @@ logback = "1.5.18"
 decompose = { module = "com.arkivanov.decompose:decompose", version.ref = "decompose" }
 decompose-extensions-compose = { module = "com.arkivanov.decompose:extensions-compose", version.ref = "decompose" }
 
+firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
 firebase-config = { module = "com.google.firebase:firebase-config", version.ref = "firebaseConfig" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
