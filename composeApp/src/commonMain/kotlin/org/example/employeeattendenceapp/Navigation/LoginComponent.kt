@@ -7,5 +7,6 @@ class LoginComponent(
     componentContext: ComponentContext,
     val role: String,
     val onNavigateBack: () -> Unit,
-    val onNavigateToSignup: () -> Unit
+    val onNavigateToSignup: () -> Unit,
+    val onNavigateToHome: () -> Unit
 ) : ComponentContext by componentContext

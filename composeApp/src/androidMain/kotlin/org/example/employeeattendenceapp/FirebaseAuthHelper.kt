@@ -18,3 +18,28 @@ actual fun signUpWithEmailPassword(
             }
         }
 }
+
+actual fun signInWithEmailPassword(
+    email: String,
+    password: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    FirebaseAuth.getInstance()
+        .signInWithEmailAndPassword(email, password)
+        .addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                onSuccess()
+            } else {
+                onError(task.exception?.localizedMessage ?: "Login failed")
+            }
+        }
+}
+
+actual fun isUserLoggedIn(): Boolean {
+    return FirebaseAuth.getInstance().currentUser != null
+}
+
+actual fun signOut() {
+    FirebaseAuth.getInstance().signOut()
+}

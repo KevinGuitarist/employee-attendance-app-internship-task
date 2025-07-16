@@ -25,3 +25,5 @@ actual fun signUpWithEmailPassword(
         onError(e.message ?: "Unknown error")
     }
 }
+
+actual fun isUserLoggedIn(): Boolean = false

@@ -7,8 +7,10 @@ import com.arkivanov.decompose.router.stack.StackNavigation
 import com.arkivanov.decompose.router.stack.childStack
 import com.arkivanov.decompose.router.stack.pop
 import com.arkivanov.decompose.router.stack.push
+import com.arkivanov.decompose.router.stack.replaceAll
 import com.arkivanov.decompose.value.Value
 import kotlinx.serialization.Serializable
+import org.example.employeeattendenceapp.Auth.isUserLoggedIn
 
 class RootComponent(
     componentContext: ComponentContext
@@ -19,7 +21,7 @@ class RootComponent(
     val stack: Value<ChildStack<*, Child>> = childStack(
         source = navigation,
         serializer = Config.serializer(),
-        initialConfiguration = Config.Dashboard,
+        initialConfiguration = if (isUserLoggedIn()) Config.HomeWithFlag(false) else Config.Dashboard,
         childFactory = ::createChild
     )
 
@@ -33,21 +35,23 @@ class RootComponent(
                     }
                 )
             )
-                    is Config.Login -> Child.Login(
-            LoginComponent(
-                componentContext = context,
-                role = config.role,
-                onNavigateBack = { navigation.pop() },
-                onNavigateToSignup = { navigation.push(Config.Signup) }
+            is Config.Login -> Child.Login(
+                LoginComponent(
+                    componentContext = context,
+                    role = config.role,
+                    onNavigateBack = { navigation.pop() },
+                    onNavigateToSignup = { navigation.push(Config.Signup) },
+                    onNavigateToHome = { navigation.replaceAll(Config.HomeWithFlag(true)) }
+                )
             )
-        )
-        is Config.Signup -> Child.Signup(
-            SignupComponent(
-                componentContext = context,
-                onNavigateBack = { navigation.pop() },
-                onNavigateToLogin = { navigation.pop() }
+            is Config.Signup -> Child.Signup(
+                SignupComponent(
+                    componentContext = context,
+                    onNavigateBack = { navigation.pop() },
+                    onNavigateToLogin = { navigation.pop() }
+                )
             )
-        )
+            is Config.HomeWithFlag -> Child.Home(config.justLoggedIn)
         }
 
     @Serializable
@@ -58,11 +62,14 @@ class RootComponent(
         data class Login(val role: String) : Config()
         @Serializable
         object Signup : Config()
+        @Serializable
+        data class HomeWithFlag(val justLoggedIn: Boolean = false) : Config()
     }
 
     sealed class Child {
         data class Dashboard(val component: DashboardComponent) : Child()
         data class Login(val component: LoginComponent) : Child()
         data class Signup(val component: SignupComponent) : Child()
+        data class Home(val justLoggedIn: Boolean) : Child()
     }
 }

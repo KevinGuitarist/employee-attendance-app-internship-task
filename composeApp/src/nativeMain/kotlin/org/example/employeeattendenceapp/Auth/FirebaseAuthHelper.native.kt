@@ -8,3 +8,5 @@ actual fun signUpWithEmailPassword(
 ) {
     TODO("Not yet implemented")
 }
+
+actual fun isUserLoggedIn(): Boolean = false

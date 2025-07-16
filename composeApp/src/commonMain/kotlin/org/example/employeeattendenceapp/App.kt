@@ -27,6 +27,8 @@ fun App() {
                 LoginScreen(component = instance.component)
             is RootComponent.Child.Signup ->
                 SignUp(component = instance.component)
+            is RootComponent.Child.Home ->
+                HomeScreen(justLoggedIn = instance.justLoggedIn)
         }
     }
 }

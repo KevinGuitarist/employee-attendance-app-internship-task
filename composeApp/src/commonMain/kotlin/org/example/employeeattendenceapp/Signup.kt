@@ -18,14 +18,21 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.LocalFocusManager
 import employeeattendanceapp.composeapp.generated.resources.Res
 import employeeattendanceapp.composeapp.generated.resources.logo
 import org.example.employeeattendenceapp.Auth.signUpWithEmailPassword
 import org.example.employeeattendenceapp.Navigation.SignupComponent
 import org.jetbrains.compose.resources.painterResource
+import kotlinx.coroutines.launch
 
 @Composable
 fun SignUp(component: SignupComponent) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    var isSuccess by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    var isLoading by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -139,19 +146,33 @@ fun SignUp(component: SignupComponent) {
                 // Sign Up Button
                 Button(
                     onClick = {
+                        isLoading = true
                         signUpWithEmailPassword(
                             email = emailValue.text,
                             password = passwordValue.text,
-                            onSuccess = { /* show success snackbar or navigate */ },
-                            onError = { message -> /* show error snackbar or log it */ }
+                            onSuccess = {
+                                coroutineScope.launch {
+                                    focusManager.clearFocus()
+                                    isLoading = false
+                                    snackbarHostState.showSnackbar("Account created successfully, now login.")
+                                    isSuccess = true
+                                }
+                            },
+                            onError = { message ->
+                                coroutineScope.launch {
+                                    focusManager.clearFocus()
+                                    isLoading = false
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            }
                         )
-
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4)),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    enabled = !isLoading
                 ) {
                         Text("Sign Up", color = Color.White)
                 }
@@ -180,6 +201,36 @@ fun SignUp(component: SignupComponent) {
                 color = Color.Gray,
                 fontSize = 12.sp
             )
+        }
+        // SnackbarHost overlay
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+        // Loading indicator overlay
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(2f),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.8f),
+                    shadowElevation = 8.dp
+                ) {
+                    Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+        }
+    }
+    // Navigate to login after success snackbar
+    if (isSuccess) {
+        LaunchedEffect(Unit) {
+            component.onNavigateToLogin()
         }
     }
 }

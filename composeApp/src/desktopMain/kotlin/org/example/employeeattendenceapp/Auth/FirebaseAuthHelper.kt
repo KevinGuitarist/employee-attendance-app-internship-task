@@ -8,3 +8,5 @@ actual fun signUpWithEmailPassword(
 ) {
     onError("Sign-up not supported on Desktop.")
 }
+
+actual fun isUserLoggedIn(): Boolean = false

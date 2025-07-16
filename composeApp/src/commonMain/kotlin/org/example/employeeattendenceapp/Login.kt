@@ -23,9 +23,18 @@ import employeeattendanceapp.composeapp.generated.resources.Res
 import employeeattendanceapp.composeapp.generated.resources.logo
 import org.example.employeeattendenceapp.Navigation.LoginComponent
 import org.jetbrains.compose.resources.painterResource
+import androidx.compose.ui.platform.LocalFocusManager
+import kotlinx.coroutines.delay
+import org.example.employeeattendenceapp.Auth.signInWithEmailPassword
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(component: LoginComponent) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    var isLoading by remember { mutableStateOf(false) }
+    // No need for isSuccess state
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -127,12 +136,40 @@ fun LoginScreen(component: LoginComponent) {
 
                 // Login Button
                 Button(
-                    onClick = { /*TODO*/ },
+                    onClick = {
+                        isLoading = true
+                        signInWithEmailPassword(
+                            email = emailValue.text,
+                            password = passwordValue.text,
+                            onSuccess = {
+                                coroutineScope.launch {
+                                    focusManager.clearFocus()
+                                    isLoading = false
+                                    component.onNavigateToHome()
+                                }
+                            },
+                            onError = { message ->
+                                coroutineScope.launch {
+                                    focusManager.clearFocus()
+                                    isLoading = false
+                                    val lowerMsg = message.lowercase()
+                                    if ("no user record" in lowerMsg || "no user" in lowerMsg || "does not exist" in lowerMsg) {
+                                        snackbarHostState.showSnackbar("Email doesn't exist")
+                                    } else if ("password is invalid" in lowerMsg || "auth credential is incorrect" in lowerMsg) {
+                                        snackbarHostState.showSnackbar("Invalid Password")
+                                    } else {
+                                        snackbarHostState.showSnackbar(message)
+                                    }
+                                }
+                            }
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4)),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    enabled = !isLoading
                 ) {
                     Text("Log In", color = Color.White)
                 }
@@ -165,6 +202,30 @@ fun LoginScreen(component: LoginComponent) {
                 color = Color.Gray,
                 fontSize = 12.sp
             )
+        }
+        // SnackbarHost overlay
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+        // Loading indicator overlay
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(2f),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.8f),
+                    shadowElevation = 8.dp
+                ) {
+                    Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
         }
     }
 }
