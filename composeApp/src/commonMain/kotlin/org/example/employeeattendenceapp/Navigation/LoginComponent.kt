@@ -9,4 +9,6 @@ class LoginComponent(
     val onNavigateBack: () -> Unit,
     val onNavigateToSignup: () -> Unit,
     val onNavigateToHome: () -> Unit
-) : ComponentContext by componentContext
+) : ComponentContext by componentContext {
+    val showSignUp: Boolean = role != "admin"
+}

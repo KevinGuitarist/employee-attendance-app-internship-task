@@ -24,7 +24,6 @@ import employeeattendanceapp.composeapp.generated.resources.logo
 import org.example.employeeattendenceapp.Navigation.LoginComponent
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.platform.LocalFocusManager
-import kotlinx.coroutines.delay
 import org.example.employeeattendenceapp.Auth.signInWithEmailPassword
 import kotlinx.coroutines.launch
 
@@ -177,20 +176,20 @@ fun LoginScreen(component: LoginComponent) {
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Don't have an account?
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Don't have an account? ")
-
-                    Spacer(modifier = Modifier.width(2.dp))
-
-                    Text(
-                        text = "Sign Up",
-                        color = Color(0xFF4285F4),
-                        modifier = Modifier.clickable { component.onNavigateToSignup() }
-                    )
+                if (component.showSignUp) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Don't have an account? ")
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = "Sign Up",
+                            color = Color(0xFF4285F4),
+                            modifier = Modifier.clickable { component.onNavigateToSignup() }
+                        )
+                    }
                 }
             }
 
