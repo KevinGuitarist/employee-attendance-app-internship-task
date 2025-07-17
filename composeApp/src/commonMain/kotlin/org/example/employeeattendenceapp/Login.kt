@@ -103,13 +103,18 @@ fun LoginScreen(component: LoginComponent) {
                     style = MaterialTheme.typography.bodyLarge
                 )
                 var emailValue by remember { mutableStateOf(TextFieldValue("")) }
+                var emailError by remember { mutableStateOf(false) }
                 OutlinedTextField(
                     value = emailValue,
-                    onValueChange = { emailValue = it },
+                    onValueChange = {
+                        emailValue = it
+                        emailError = false
+                    },
                     placeholder = { Text("Enter your email") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
-                    singleLine = true
+                    singleLine = true,
+                    isError = emailError
                 )
 
                 // Password
@@ -118,14 +123,19 @@ fun LoginScreen(component: LoginComponent) {
                     style = MaterialTheme.typography.bodyLarge
                 )
                 var passwordValue by remember { mutableStateOf(TextFieldValue("")) }
+                var passwordError by remember { mutableStateOf(false) }
                 OutlinedTextField(
                     value = passwordValue,
-                    onValueChange = { passwordValue = it },
+                    onValueChange = {
+                        passwordValue = it
+                        passwordError = false
+                    },
                     placeholder = { Text("Enter your password") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = passwordError
                 )
 
                 // Forgot Password
@@ -136,10 +146,19 @@ fun LoginScreen(component: LoginComponent) {
                 // Login Button
                 Button(
                     onClick = {
+                        if (emailValue.text.isBlank() || passwordValue.text.isBlank()) {
+                            emailError = emailValue.text.isBlank()
+                            passwordError = passwordValue.text.isBlank()
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Please fill in all fields.")
+                            }
+                            return@Button
+                        }
                         isLoading = true
                         signInWithEmailPassword(
                             email = emailValue.text,
                             password = passwordValue.text,
+                            expectedRole = component.role,
                             onSuccess = {
                                 coroutineScope.launch {
                                     focusManager.clearFocus()
@@ -147,14 +166,28 @@ fun LoginScreen(component: LoginComponent) {
                                     component.onNavigateToHome()
                                 }
                             },
+                            onRoleMismatch = {
+                                coroutineScope.launch {
+                                    focusManager.clearFocus()
+                                    isLoading = false
+                                    snackbarHostState.showSnackbar("Invalid Email")
+                                }
+                            },
                             onError = { message ->
                                 coroutineScope.launch {
                                     focusManager.clearFocus()
                                     isLoading = false
                                     val lowerMsg = message.lowercase()
-                                    if ("no user record" in lowerMsg || "no user" in lowerMsg || "does not exist" in lowerMsg) {
+                                    if (
+                                        "user-not-found" in lowerMsg ||
+                                        "no user record" in lowerMsg ||
+                                        "no user" in lowerMsg ||
+                                        "does not exist" in lowerMsg ||
+                                        "auth credential is incorrect" in lowerMsg ||
+                                        "malformed" in lowerMsg
+                                    ) {
                                         snackbarHostState.showSnackbar("Email doesn't exist")
-                                    } else if ("password is invalid" in lowerMsg || "auth credential is incorrect" in lowerMsg) {
+                                    } else if ("wrong-password" in lowerMsg || "password is invalid" in lowerMsg) {
                                         snackbarHostState.showSnackbar("Invalid Password")
                                     } else {
                                         snackbarHostState.showSnackbar(message)

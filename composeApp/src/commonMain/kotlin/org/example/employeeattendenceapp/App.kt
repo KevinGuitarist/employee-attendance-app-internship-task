@@ -28,7 +28,11 @@ fun App() {
             is RootComponent.Child.Signup ->
                 SignUp(component = instance.component)
             is RootComponent.Child.Home ->
-                HomeScreen(justLoggedIn = instance.justLoggedIn)
+                if (instance.role == "admin") {
+                    HomeScreenAdmin(justLoggedIn = instance.justLoggedIn)
+                } else {
+                    HomeScreenEmployee(justLoggedIn = instance.justLoggedIn)
+                }
         }
     }
 }

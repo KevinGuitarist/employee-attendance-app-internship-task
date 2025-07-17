@@ -150,6 +150,7 @@ fun SignUp(component: SignupComponent) {
                         signUpWithEmailPassword(
                             email = emailValue.text,
                             password = passwordValue.text,
+                            role = component.role, // Pass the role from the component
                             onSuccess = {
                                 coroutineScope.launch {
                                     focusManager.clearFocus()

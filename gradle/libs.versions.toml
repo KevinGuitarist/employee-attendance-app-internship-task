@@ -18,6 +18,7 @@ firebaseAuth = "23.2.1"
 firebaseCommon = "1.8.1"
 firebaseConfig = "22.1.2"
 firebaseDatabase = "21.0.0"
+firebaseDatabaseKtx = "21.0.0"
 firebaseFirestore = "1.8.1"
 junit = "4.13.2"
 kotlin = "2.2.0"
@@ -35,6 +36,7 @@ firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
 firebase-common = { module = "dev.gitlive:firebase-common", version.ref = "firebaseCommon" }
 firebase-config = { module = "com.google.firebase:firebase-config", version.ref = "firebaseConfig" }
 firebase-database = { module = "com.google.firebase:firebase-database", version.ref = "firebaseDatabase" }
+firebase-database-ktx = { module = "com.google.firebase:firebase-database-ktx", version.ref = "firebaseDatabaseKtx" }
 firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = "firebaseFirestore" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }

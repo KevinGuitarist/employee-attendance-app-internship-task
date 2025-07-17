@@ -16,7 +16,7 @@ import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.delay
 
 @Composable
-fun HomeScreen(justLoggedIn: Boolean = false) {
+fun HomeScreenAdmin(justLoggedIn: Boolean = false) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -53,7 +53,7 @@ fun HomeScreen(justLoggedIn: Boolean = false) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Welcome to Home Screen!",
+                text = "Welcome to Home Screen Admin!",
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center
             )
@@ -67,3 +67,4 @@ fun HomeScreen(justLoggedIn: Boolean = false) {
         }
     }
 }
+
