@@ -24,14 +24,17 @@ import employeeattendanceapp.composeapp.generated.resources.logo
 import org.example.employeeattendenceapp.Navigation.LoginComponent
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import org.example.employeeattendenceapp.Auth.signInWithEmailPassword
 import kotlinx.coroutines.launch
+import org.example.employeeattendenceapp.Auth.saveUserRole
 
 @Composable
 fun LoginScreen(component: LoginComponent) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
     var isLoading by remember { mutableStateOf(false) }
     // No need for isSuccess state
     Box(
@@ -160,6 +163,7 @@ fun LoginScreen(component: LoginComponent) {
                             password = passwordValue.text,
                             expectedRole = component.role,
                             onSuccess = {
+                                saveUserRole(context, component.role)
                                 coroutineScope.launch {
                                     focusManager.clearFocus()
                                     isLoading = false

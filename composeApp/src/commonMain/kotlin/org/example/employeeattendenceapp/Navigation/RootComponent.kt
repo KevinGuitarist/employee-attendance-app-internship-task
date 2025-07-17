@@ -13,16 +13,17 @@ import kotlinx.serialization.Serializable
 import org.example.employeeattendenceapp.Auth.isUserLoggedIn
 
 class RootComponent(
-    componentContext: ComponentContext
+    componentContext: ComponentContext,
+    initialRole: String = "employee"
 ) : ComponentContext by componentContext {
 
     private val navigation = StackNavigation<Config>()
-    private var lastSelectedRole: String = "employee"
+    private var lastSelectedRole: String = initialRole
 
     val stack: Value<ChildStack<*, Child>> = childStack(
         source = navigation,
         serializer = Config.serializer(),
-        initialConfiguration = if (isUserLoggedIn()) Config.HomeWithFlag(false) else Config.Dashboard,
+        initialConfiguration = if (isUserLoggedIn()) Config.HomeWithFlag(false, initialRole) else Config.Dashboard,
         childFactory = ::createChild
     )
 

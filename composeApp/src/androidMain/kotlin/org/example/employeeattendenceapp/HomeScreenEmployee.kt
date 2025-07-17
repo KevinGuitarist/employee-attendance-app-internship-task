@@ -24,6 +24,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import org.example.employeeattendenceapp.Auth.signOut
 import androidx.compose.runtime.collectAsState
+import org.example.employeeattendenceapp.Auth.clearUserRole
 
 @Composable
 actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
@@ -58,19 +59,13 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         ) {
             IconButton(
                 onClick = {
-                    try {
-                        signOut()
-                        // Restart activity to reset navigation
-                        if (context is Activity) {
-                            val intent = Intent(context, context::class.java)
-                            context.finish()
-                            context.startActivity(intent)
-                        }
-                    } catch (e: Exception) {
-                        // Show error if logout fails
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Logout failed: ${e.localizedMessage}")
-                        }
+                    signOut()
+                    clearUserRole(context)
+                    // Restart activity to reset navigation
+                    if (context is Activity) {
+                        val intent = Intent(context, context::class.java)
+                        context.finish()
+                        context.startActivity(intent)
                     }
                 },
                 modifier = Modifier.padding(16.dp)
@@ -225,3 +220,4 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 }
+

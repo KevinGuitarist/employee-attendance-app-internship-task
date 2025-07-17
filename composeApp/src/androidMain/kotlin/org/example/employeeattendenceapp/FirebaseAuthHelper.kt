@@ -2,6 +2,11 @@ package org.example.employeeattendenceapp.Auth
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
+import android.content.Context
+import android.content.SharedPreferences
+
+private const val PREFS_NAME = "user_prefs"
+private const val KEY_USER_ROLE = "user_role"
 
 actual fun signUpWithEmailPassword(
     email: String,
@@ -69,4 +74,22 @@ actual fun isUserLoggedIn(): Boolean {
 
 actual fun signOut() {
     FirebaseAuth.getInstance().signOut()
+}
+
+fun getPrefs(context: Context): SharedPreferences =
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+actual fun saveUserRole(context: Any, role: String) {
+    val ctx = context as Context
+    getPrefs(ctx).edit().putString(KEY_USER_ROLE, role).apply()
+}
+
+actual fun getUserRole(context: Any): String? {
+    val ctx = context as Context
+    return getPrefs(ctx).getString(KEY_USER_ROLE, null)
+}
+
+actual fun clearUserRole(context: Any) {
+    val ctx = context as Context
+    getPrefs(ctx).edit().remove(KEY_USER_ROLE).apply()
 }

@@ -2,7 +2,8 @@ package org.example.employeeattendenceapp
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Composable // only if supported by JetBrains Compose Multiplatform
+
 
 class EmployeeAttendanceState {
     private val _statusText = MutableStateFlow("Active")

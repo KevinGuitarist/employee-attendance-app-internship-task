@@ -4,18 +4,23 @@ import androidx.compose.runtime.*
 import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.decompose.extensions.compose.stack.Children
 import com.arkivanov.essenty.lifecycle.LifecycleRegistry
+import org.example.employeeattendenceapp.Auth.getUserRole
 import org.example.employeeattendenceapp.Navigation.RootComponent
 import org.jetbrains.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 @Preview
 fun App() {
 
+    val context = LocalContext.current
     val root = remember {
+        val initialRole = getUserRole(context) ?: "employee"
         RootComponent(
             componentContext = DefaultComponentContext(
                 lifecycle = LifecycleRegistry()
-            )
+            ),
+            initialRole = initialRole
         )
     }
 

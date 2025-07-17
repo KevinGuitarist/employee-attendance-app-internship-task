@@ -20,3 +20,7 @@ expect fun signInWithEmailPassword(
 expect fun isUserLoggedIn(): Boolean
 
 expect fun signOut()
+
+expect fun saveUserRole(context: Any, role: String)
+expect fun getUserRole(context: Any): String?
+expect fun clearUserRole(context: Any)
