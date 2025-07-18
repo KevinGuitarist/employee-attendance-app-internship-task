@@ -80,6 +80,8 @@ kotlin {
 
             implementation(libs.accompanist.permissions)
 
+            implementation(libs.accompanist.swiperefresh)
+
         }
         commonMain.dependencies {
             implementation(compose.runtime)
