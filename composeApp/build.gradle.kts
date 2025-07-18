@@ -76,6 +76,10 @@ kotlin {
 
             implementation(libs.firebase.database.ktx)
 
+            implementation(libs.play.services.location)
+
+            implementation(libs.accompanist.permissions)
+
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -86,6 +90,7 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodel)
             implementation(libs.androidx.lifecycle.runtimeCompose)
+
             implementation(projects.shared)
 
             //Decompose

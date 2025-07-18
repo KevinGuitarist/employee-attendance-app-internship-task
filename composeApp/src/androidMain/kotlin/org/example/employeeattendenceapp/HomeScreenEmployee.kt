@@ -31,7 +31,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
+import com.google.firebase.auth.FirebaseAuth
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import com.google.android.gms.location.LocationServices
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.isGranted
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationResult
+import androidx.compose.runtime.DisposableEffect
+import android.location.Location
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -43,6 +59,68 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val statusText by attendanceState.statusText.collectAsState(initial = "Active")
     val markAttendanceEnabled by attendanceState.markAttendanceEnabled.collectAsState(initial = true)
     val withinZoneVisible by attendanceState.withinZoneVisible.collectAsState(initial = true)
+
+    // Location state
+    var latitude by remember { mutableStateOf<Double?>(null) }
+    var longitude by remember { mutableStateOf<Double?>(null) }
+    var locationError by remember { mutableStateOf<String?>(null) }
+    var permissionRequested by remember { mutableStateOf(false) }
+
+    val locationPermissionState = rememberPermissionState(
+        android.Manifest.permission.ACCESS_FINE_LOCATION
+    )
+
+    // Request permission if not granted
+    LaunchedEffect(Unit) {
+        if (!locationPermissionState.status.isGranted) {
+            locationPermissionState.launchPermissionRequest()
+        }
+    }
+
+    // Only fetch location if permission is granted
+    if (locationPermissionState.status.isGranted) {
+        val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+        val locationRequest = remember {
+            LocationRequest.create().apply {
+                interval = 5000 // 5 seconds
+                fastestInterval = 2000 // 2 seconds
+                priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+            }
+        }
+
+        // Show last known location immediately if available
+        LaunchedEffect(Unit) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    latitude = location.latitude
+                    longitude = location.longitude
+                    locationError = null
+                }
+            }.addOnFailureListener {
+                // Don't set error here, wait for real-time update
+            }
+        }
+
+        // Start real-time location updates
+        DisposableEffect(Unit) {
+            val callback = object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    val loc = result.lastLocation
+                    if (loc != null) {
+                        latitude = loc.latitude
+                        longitude = loc.longitude
+                        locationError = null
+                    }
+                }
+            }
+            fusedLocationClient.requestLocationUpdates(locationRequest, callback, null)
+            onDispose {
+                fusedLocationClient.removeLocationUpdates(callback)
+            }
+        }
+    } else {
+        locationError = "Location permission not granted."
+    }
 
     // Show snackbar if just logged in
     if (justLoggedIn) {
@@ -68,7 +146,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 20.dp)
+                    .padding(top = 20.dp, bottom = 24.dp)
                     .shadow(2.dp, RoundedCornerShape(16.dp)),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
@@ -80,6 +158,14 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Place here so both avatar and text can use it
+                        val userEmail = FirebaseAuth.getInstance().currentUser?.email
+                        val userName = userEmail?.substringBefore("@") ?: "Employee"
+                        val initial = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "E"
+                        val currentDate = LocalDate.now()
+                        val dateFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())
+                        val formattedDate = currentDate.format(dateFormatter)
+
                         // Avatar
                         Box(
                             modifier = Modifier
@@ -88,7 +174,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "J", // Initial or avatar
+                                text = initial, // Initial from name
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = MaterialTheme.typography.headlineMedium.fontSize
@@ -97,12 +183,12 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Welcome, John",
+                                text = "Welcome, $userName",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Tuesday, 12 March",
+                                text = formattedDate,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
@@ -150,21 +236,31 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         modifier = Modifier.padding(start = 2.dp, top = 2.dp)
                     )
                     Spacer(modifier = Modifier.height(14.dp))
-                    Text(
-                        text = "Latitude: 37.7749° N",
-                        color = Color.Gray,
-                        style = MaterialTheme.typography.titleMedium, // larger font
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Longitude: 122.4194° W",
-                        color = Color.Gray,
-                        style = MaterialTheme.typography.titleMedium, // larger font
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
+                    if (locationError != null) {
+                        Text(
+                            text = locationError!!,
+                            color = Color.Red,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "Latitude: ${latitude?.let { String.format("%.6f", it) } ?: "..."}",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.titleMedium, // larger font
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Longitude: ${longitude?.let { String.format("%.6f", it) } ?: "..."}",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.titleMedium, // larger font
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(18.dp))
                     Image(
                         painter = painterResource(id = R.drawable.map),
