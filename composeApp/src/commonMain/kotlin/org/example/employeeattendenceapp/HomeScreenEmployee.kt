@@ -24,6 +24,13 @@ class EmployeeAttendanceState {
     fun resetZoneVisibility() {
         _withinZoneVisible.value = true
     }
+
+    fun setStatusActive() {
+        _statusText.value = "Active"
+    }
+    fun setStatusDash() {
+        _statusText.value = "--"
+    }
 }
 
 @Composable

@@ -217,7 +217,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     // State: is user in office zone?
     val isInOfficeZone = latitude != null && longitude != null &&
-        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 10
+        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 20
 
     // Show loading spinner if user is near the office zone boundary (within 20m but not in 10m zone)
     val isNearOfficeZone = latitude != null && longitude != null &&
@@ -229,6 +229,32 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    // Track the last day when attendance was marked
+    var lastAttendanceDay by remember { mutableStateOf(LocalDate.now()) }
+
+    LaunchedEffect(now) {
+        val today = LocalDate.now()
+        if (today != lastAttendanceDay) {
+            // Remove all usages of attendanceState.resetStatus()
+            // (No calls to resetStatus should remain)
+            lastAttendanceDay = today
+        }
+    }
+
+    // Remove markAttendance logic for status
+    // Real-time status update based on location
+    val isWithin20m = latitude != null && longitude != null &&
+        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 20
+
+    // Real-time status update
+    LaunchedEffect(isWithin20m) {
+        if (isWithin20m) {
+            attendanceState.setStatusActive()
+        } else {
+            attendanceState.setStatusDash()
+        }
+    }
 
     Box(
         modifier = Modifier
