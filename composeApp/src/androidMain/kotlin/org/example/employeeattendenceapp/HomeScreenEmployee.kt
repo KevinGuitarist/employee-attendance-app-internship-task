@@ -46,6 +46,11 @@ import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationResult
 import androidx.compose.runtime.DisposableEffect
 import android.location.Location
+import android.location.LocationManager
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.os.Build
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -64,7 +69,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     var latitude by remember { mutableStateOf<Double?>(null) }
     var longitude by remember { mutableStateOf<Double?>(null) }
     var locationError by remember { mutableStateOf<String?>(null) }
-    var permissionRequested by remember { mutableStateOf(false) }
 
     val locationPermissionState = rememberPermissionState(
         android.Manifest.permission.ACCESS_FINE_LOCATION
@@ -82,8 +86,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
         val locationRequest = remember {
             LocationRequest.create().apply {
-                interval = 5000 // 5 seconds
-                fastestInterval = 2000 // 2 seconds
+                interval = 1000 // 1 second
+                fastestInterval = 500 // 0.5 seconds
                 priority = LocationRequest.PRIORITY_HIGH_ACCURACY
             }
         }
@@ -122,6 +126,60 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         locationError = "Location permission not granted."
     }
 
+    // Helper to determine if we have a valid location
+    val hasLocation = latitude != null && longitude != null && locationError == null
+
+    // If permission is revoked or location is unavailable, clear values
+    LaunchedEffect(locationPermissionState.status.isGranted) {
+        if (!locationPermissionState.status.isGranted) {
+            latitude = null
+            longitude = null
+            locationError = "Location permission not granted."
+        }
+    }
+
+    // State to track if location services are enabled
+    var locationServicesEnabled by remember { mutableStateOf(true) }
+
+    // Helper to check if location services are enabled
+    fun isLocationEnabled(context: Context): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return try {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // Listen for location services changes
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                locationServicesEnabled = isLocationEnabled(context!!)
+            }
+        }
+        val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            context.registerReceiver(receiver, filter)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
+        // Set initial state
+        locationServicesEnabled = isLocationEnabled(context)
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
+
+    // Clear location if services are off
+    LaunchedEffect(locationServicesEnabled) {
+        if (!locationServicesEnabled) {
+            latitude = null
+            longitude = null
+            locationError = null
+        }
+    }
+
     // Show snackbar if just logged in
     if (justLoggedIn) {
         LaunchedEffect(justLoggedIn) {
@@ -129,6 +187,28 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             snackbarHostState.showSnackbar("Logged in successfully!")
         }
     }
+
+    // Office location (from user):
+    val officeLat = 29.275762
+    val officeLon = 79.545075
+
+    // Helper to calculate distance between two lat/lon points (in meters)
+    fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+        val result = FloatArray(1)
+        android.location.Location.distanceBetween(lat1, lon1, lat2, lon2, result)
+        return result[0]
+    }
+
+    // State: is user in office zone?
+    val isInOfficeZone = latitude != null && longitude != null &&
+        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 10
+
+    // Show loading spinner if user is near the office zone boundary (within 20m but not in 10m zone)
+    val isNearOfficeZone = latitude != null && longitude != null &&
+        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) in 10.0..20.0
+
+    // State for attendance button warning
+    var showZoneWarning by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -236,30 +316,52 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         modifier = Modifier.padding(start = 2.dp, top = 2.dp)
                     )
                     Spacer(modifier = Modifier.height(14.dp))
-                    if (locationError != null) {
-                        Text(
-                            text = locationError!!,
-                            color = Color.Red,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                    } else {
-                        Text(
-                            text = "Latitude: ${latitude?.let { String.format("%.6f", it) } ?: "..."}",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.titleMedium, // larger font
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Longitude: ${longitude?.let { String.format("%.6f", it) } ?: "..."}",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.titleMedium, // larger font
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
+                    when {
+                        !locationServicesEnabled -> {
+                            Text(
+                                text = "Waiting for location...",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                        locationError != null -> {
+                            Text(
+                                text = locationError!!,
+                                color = Color.Red,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                        hasLocation -> {
+                            val color = if (isInOfficeZone) Color.Gray else Color.Red
+                            Text(
+                                text = "Latitude: ${latitude?.let { String.format("%.6f", it) }}",
+                                color = color,
+                                style = MaterialTheme.typography.titleMedium, // larger font
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Longitude: ${longitude?.let { String.format("%.6f", it) }}",
+                                color = color,
+                                style = MaterialTheme.typography.titleMedium, // larger font
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                        else -> {
+                            Text(
+                                text = "Waiting for location...",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(18.dp))
                     Image(
@@ -289,27 +391,48 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                 ) {
                     Button(
                         onClick = {
-                            try {
-                                attendanceState.markAttendance()
+                            if (!isInOfficeZone) {
                                 coroutineScope.launch {
-                                    delay(3000)
-                                    attendanceState.resetZoneVisibility()
+                                    snackbarHostState.showSnackbar("You can't mark attendance. You are not in office.")
                                 }
-                            } catch (e: Exception) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("Attendance failed: ${e.localizedMessage}")
+                            } else {
+                                try {
+                                    attendanceState.markAttendance()
+                                    coroutineScope.launch {
+                                        delay(3000)
+                                        attendanceState.resetZoneVisibility()
+                                    }
+                                } catch (e: Exception) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Attendance failed: ${e.localizedMessage}")
+                                    }
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4B89DC)),
-                        enabled = markAttendanceEnabled,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isInOfficeZone) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
+                        ),
+                        enabled = markAttendanceEnabled, // Always enabled if attendance is allowed
                         shape = RoundedCornerShape(8.dp)
                     ) {
+                        if (isNearOfficeZone) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Text(text = "Mark Attendance", color = Color.White)
                     }
+                    if (showZoneWarning) {
+                        LaunchedEffect(showZoneWarning) {
+                            snackbarHostState.showSnackbar("You can't mark attendance. You are not in office.")
+                            showZoneWarning = false
+                        }
+                    }
                     AnimatedVisibility(
-                        visible = withinZoneVisible,
+                        visible = withinZoneVisible && isInOfficeZone && locationServicesEnabled,
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
