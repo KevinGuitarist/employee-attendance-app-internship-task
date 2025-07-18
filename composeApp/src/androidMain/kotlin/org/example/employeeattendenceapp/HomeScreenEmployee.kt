@@ -51,6 +51,8 @@ import android.content.IntentFilter
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.os.Build
+import java.time.LocalTime
+import androidx.compose.ui.draw.alpha
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -187,6 +189,18 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             snackbarHostState.showSnackbar("Logged in successfully!")
         }
     }
+
+    // Add this inside your composable:
+    var now by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = LocalTime.now()
+            delay(1000L) // update every second
+        }
+    }
+    val officeStartTime = LocalTime.of(9, 0)
+    val officeEndTime = LocalTime.of(18, 0)
+    val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) && now.isBefore(officeEndTime.plusNanos(1))
 
     // Office location (from user):
     val officeLat = 29.275762
@@ -391,7 +405,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                 ) {
                     Button(
                         onClick = {
-                            if (!isInOfficeZone) {
+                            if (!isOfficeTime) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Not an office time")
+                                }
+                            } else if (!isInOfficeZone) {
                                 coroutineScope.launch {
                                     snackbarHostState.showSnackbar("You can't mark attendance. You are not in office.")
                                 }
@@ -409,7 +427,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (isOfficeTime) 1f else 0.5f), // Faded when not office time
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isInOfficeZone) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
                         ),
