@@ -25,6 +25,12 @@ import androidx.compose.animation.fadeOut
 import org.example.employeeattendenceapp.Auth.signOut
 import androidx.compose.runtime.collectAsState
 import org.example.employeeattendenceapp.Auth.clearUserRole
+import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.ContentScale
 
 @Composable
 actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
@@ -46,170 +52,247 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(Color(0xFFF6F8FB))
     ) {
-        // Logout icon at top right
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            IconButton(
-                onClick = {
-                    signOut()
-                    clearUserRole(context)
-                    // Restart activity to reset navigation
-                    if (context is Activity) {
-                        val intent = Intent(context, context::class.java)
-                        context.finish()
-                        context.startActivity(intent)
-                    }
-                },
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                    contentDescription = "Log Out"
-                )
-            }
-        }
-
-        // Welcome message
-        Text(
-            text = "Welcome, John",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.Start)
-        )
-        // Date
-        Text(
-            text = "Tuesday, 12 March",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.align(Alignment.Start)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Current Location Card
-        Card(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp)),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "Current Location",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(text = "Latitude: 37.7749° N")
-                Text(text = "Longitude: 122.4194° W")
-                // Map image (ensure resource exists in androidMain/res/drawable)
-                Image(
-                    painter = painterResource(id = R.drawable.map),
-                    contentDescription = "Location Map",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Mark Attendance Button
-        Button(
-            onClick = {
-                try {
-                    attendanceState.markAttendance()
-                    // Hide the "within zone" text briefly with animation
-                    coroutineScope.launch {
-                        delay(3000)
-                        attendanceState.resetZoneVisibility()
-                    }
-                } catch (e: Exception) {
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar("Attendance failed: ${e.localizedMessage}")
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4B89DC)),
-            enabled = markAttendanceEnabled
-        ) {
-            Text(text = "Mark Attendance", color = Color.White)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Within Allowed Zone Indicator with animation
-        AnimatedVisibility(
-            visible = withinZoneVisible,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
+            // Header Section
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(4.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE2F6D6))
+                    .padding(bottom = 20.dp)
+                    .shadow(2.dp, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Check icon (ensure resource exists in androidMain/res/drawable)
-                    Icon(
-                        painter = painterResource(id = R.drawable.check_circle),
-                        contentDescription = "Within Zone",
-                        tint = Color(0xFF38761D)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "You are within allowed location zone", color = Color(0xFF38761D))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Avatar
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(Color(0xFF4B89DC), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "J", // Initial or avatar
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = MaterialTheme.typography.headlineMedium.fontSize
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Welcome, John",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Tuesday, 12 March",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                    // Logout
+                    IconButton(
+                        onClick = {
+                            signOut()
+                            clearUserRole(context)
+                            if (context is Activity) {
+                                val intent = Intent(context, context::class.java)
+                                context.finish()
+                                context.startActivity(intent)
+                            }
+                        },
+                        modifier = Modifier
+                            .background(Color(0xFFF6F8FB), CircleShape)
+                            .size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "Log Out",
+                            tint = Color(0xFF4B89DC)
+                        )
+                    }
                 }
             }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
 
-        // Today's Stats Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
+            // Location Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+                    .shadow(1.dp, RoundedCornerShape(12.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
-                Text(
-                    text = "Today's Stats",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    modifier = Modifier.padding(16.dp)
                 ) {
-                    Text(text = "Check-in time")
-                    Text(text = "08:45 AM")
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Working hours")
-                    Text(text = "5h 15m")
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Status")
-                    Text(text = statusText, color = Color(0xFF4B89DC))
+                    Text(
+                        text = "Current Location",
+                        style = MaterialTheme.typography.titleLarge, // larger font
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 2.dp, top = 2.dp)
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "Latitude: 37.7749° N",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.titleMedium, // larger font
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Longitude: 122.4194° W",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.titleMedium, // larger font
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Image(
+                        painter = painterResource(id = R.drawable.map),
+                        contentDescription = "Location Map",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .padding(start = 4.dp)
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    )
                 }
             }
+
+            // Mark Attendance Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+                    .shadow(1.dp, RoundedCornerShape(12.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Button(
+                        onClick = {
+                            try {
+                                attendanceState.markAttendance()
+                                coroutineScope.launch {
+                                    delay(3000)
+                                    attendanceState.resetZoneVisibility()
+                                }
+                            } catch (e: Exception) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Attendance failed: ${e.localizedMessage}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4B89DC)),
+                        enabled = markAttendanceEnabled,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(text = "Mark Attendance", color = Color.White)
+                    }
+                    AnimatedVisibility(
+                        visible = withinZoneVisible,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                                .height(64.dp), // Increased height for the box
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE2F6D6))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp), // Increased padding for more space
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.check_circle),
+                                    contentDescription = "Within Zone",
+                                    tint = Color(0xFF38761D),
+                                    modifier = Modifier.size(36.dp) // Increased icon size
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "You are within allowed location zone",
+                                    color = Color(0xFF38761D),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Today's Stats Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+                    .shadow(1.dp, RoundedCornerShape(12.dp))
+                    .height(200.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Text(
+                        text = "Today's Stats",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.Start) // Align to top left
+                    )
+                    Spacer(modifier = Modifier.height(28.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "Check-in time", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
+                        Text(text = "08:45 AM", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "Working hours", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
+                        Text(text = "5h 15m", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "Status", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
+                        Text(text = statusText, color = Color(0xFF4B89DC), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
         // Snackbar host at the bottom of the screen
         Box(
