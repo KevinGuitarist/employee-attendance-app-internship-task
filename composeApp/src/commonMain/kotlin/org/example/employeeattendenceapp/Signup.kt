@@ -33,6 +33,11 @@ fun SignUp(component: SignupComponent) {
     var isSuccess by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     var isLoading by remember { mutableStateOf(false) }
+    var emailValue by remember { mutableStateOf(TextFieldValue("")) }
+    var passwordValue by remember { mutableStateOf(TextFieldValue("")) }
+    var emailError by remember { mutableStateOf(false) }
+    var passwordError by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -60,7 +65,6 @@ fun SignUp(component: SignupComponent) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp) // Change to spacedBy instead of SpaceBetween
         ) {
-
             // Logo and Company Name
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -109,14 +113,17 @@ fun SignUp(component: SignupComponent) {
                     text = "Email",
                     style = MaterialTheme.typography.bodyLarge
                 )
-                var emailValue by remember { mutableStateOf(TextFieldValue("")) }
                 OutlinedTextField(
                     value = emailValue,
-                    onValueChange = { emailValue = it },
+                    onValueChange = {
+                        emailValue = it
+                        emailError = false
+                    },
                     placeholder = { Text("Enter your email") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
-                    singleLine = true
+                    singleLine = true,
+                    isError = emailError
                 )
 
                 // Password
@@ -124,15 +131,18 @@ fun SignUp(component: SignupComponent) {
                     text = "Password",
                     style = MaterialTheme.typography.bodyLarge
                 )
-                var passwordValue by remember { mutableStateOf(TextFieldValue("")) }
                 OutlinedTextField(
                     value = passwordValue,
-                    onValueChange = { passwordValue = it },
+                    onValueChange = {
+                        passwordValue = it
+                        passwordError = false
+                    },
                     placeholder = { Text("Create a password") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = passwordError
                 )
 
                 // Password Requirements
@@ -146,6 +156,24 @@ fun SignUp(component: SignupComponent) {
                 // Sign Up Button
                 Button(
                     onClick = {
+                        // Input validation
+                        val isEmailBlank = emailValue.text.isBlank()
+                        val isPasswordBlank = passwordValue.text.isBlank()
+                        val isPasswordShort = passwordValue.text.length < 8
+                        emailError = isEmailBlank
+                        passwordError = isPasswordBlank || isPasswordShort
+                        if (isEmailBlank || isPasswordBlank) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Please fill in all fields.")
+                            }
+                            return@Button
+                        }
+                        if (isPasswordShort) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Password must be at least 8 characters.")
+                            }
+                            return@Button
+                        }
                         isLoading = true
                         signUpWithEmailPassword(
                             email = emailValue.text,
