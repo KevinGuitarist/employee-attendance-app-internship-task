@@ -55,6 +55,10 @@ import java.time.LocalTime
 import androidx.compose.ui.draw.alpha
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -68,6 +72,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val statusText by attendanceState.statusText.collectAsState(initial = "Active")
     val markAttendanceEnabled by attendanceState.markAttendanceEnabled.collectAsState(initial = true)
     val withinZoneVisible by attendanceState.withinZoneVisible.collectAsState(initial = true)
+    val checkInTime by attendanceState.checkInTime.collectAsState(initial = null)
+    val attendanceStatus by attendanceState.attendanceStatus.collectAsState(initial = "Absent")
+    val attendanceMarkedTime by attendanceState.attendanceMarkedTime.collectAsState(initial = null)
+    val workingHours by attendanceState.workingHours.collectAsState(initial = "0h 0m 0s")
 
     // Location state
     var latitude by remember { mutableStateOf<Double?>(null) }
@@ -145,6 +153,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     // State to track if location services are enabled
     var locationServicesEnabled by remember { mutableStateOf(true) }
 
+    // State to track if internet connectivity is available
+    var internetConnected by remember { mutableStateOf(true) }
+
     // Helper to check if location services are enabled
     fun isLocationEnabled(context: Context): Boolean {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -153,6 +164,18 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         } catch (e: Exception) {
             false
         }
+    }
+
+    // Helper to check if internet is connected
+    fun isInternetConnected(context: Context): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork
+        val capabilities = connectivityManager.getNetworkCapabilities(network)
+        return capabilities != null && (
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        )
     }
 
     // Listen for location services changes
@@ -175,12 +198,53 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 
+    // Listen for internet connectivity changes
+    DisposableEffect(Unit) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                internetConnected = true
+            }
+
+            override fun onLost(network: Network) {
+                internetConnected = false
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                internetConnected = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
+        }
+
+        val networkRequest = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
+        
+        // Set initial state
+        internetConnected = isInternetConnected(context)
+        
+        onDispose {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        }
+    }
+
     // Clear location if services are off
     LaunchedEffect(locationServicesEnabled) {
         if (!locationServicesEnabled) {
             latitude = null
             longitude = null
             locationError = null
+        }
+    }
+
+    // Clear location if internet is off (since location services might depend on network)
+    LaunchedEffect(internetConnected) {
+        if (!internetConnected) {
+            latitude = null
+            longitude = null
+            locationError = "No internet connection"
         }
     }
 
@@ -205,8 +269,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) && now.isBefore(officeEndTime.plusNanos(1))
 
     // Office location (from user):
-    val officeLat = 29.275762
-    val officeLon = 79.545075
+    val officeLat = 29.369808
+    val officeLon = 79.560637
 
     // Helper to calculate distance between two lat/lon points (in meters)
     fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
@@ -236,8 +300,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     LaunchedEffect(now) {
         val today = LocalDate.now()
         if (today != lastAttendanceDay) {
-            // Remove all usages of attendanceState.resetStatus()
-            // (No calls to resetStatus should remain)
+            // Reset attendance state for new day
+            attendanceState.resetForNewDay()
             lastAttendanceDay = today
         }
     }
@@ -247,11 +311,32 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val isWithin20m = latitude != null && longitude != null &&
         distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 20
 
-    // Real-time status update
-    LaunchedEffect(isWithin20m) {
-        if (isWithin20m) {
+    // Real-time status update based on location, office hours, and internet connectivity
+    LaunchedEffect(isWithin20m, isOfficeTime, now, internetConnected) {
+        // Update working hours every time location or time changes
+        attendanceState.updateWorkingHours(now, isInOfficeZone)
+        
+        if (!internetConnected) {
+            // No internet connection - set status to --
+            attendanceState.setStatusDash()
+        } else if (attendanceState.isAttendanceMarkedToday()) {
+            // If attendance is already marked today, set attendance status to Present but keep status as Active or --
+            attendanceState.setStatusPresent()
+            // Status text remains Active or -- based on location
+            if (isWithin20m) {
+                attendanceState.setStatusActive()
+            } else {
+                attendanceState.setStatusDash()
+            }
+        } else if (!isOfficeTime) {
+            // Outside office hours, set attendance to Absent and status to --
+            attendanceState.setStatusAbsent()
+            attendanceState.setStatusDash()
+        } else if (isWithin20m) {
+            // Within office zone during office hours
             attendanceState.setStatusActive()
         } else {
+            // Outside office zone during office hours
             attendanceState.setStatusDash()
         }
     }
@@ -401,10 +486,19 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         )
                         Spacer(modifier = Modifier.height(14.dp))
                         when {
+                            !internetConnected -> {
+                                Text(
+                                    text = "No internet connection",
+                                    color = Color.Red,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
                             !locationServicesEnabled -> {
                                 Text(
-                                    text = "Waiting for location...",
-                                    color = Color.Gray,
+                                    text = "Location services disabled",
+                                    color = Color.Red,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier.padding(start = 4.dp)
@@ -475,7 +569,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     ) {
                         Button(
                             onClick = {
-                                if (!isOfficeTime) {
+                                if (!internetConnected) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("No internet connection. Please check your network.")
+                                    }
+                                } else if (!isOfficeTime) {
                                     coroutineScope.launch {
                                         snackbarHostState.showSnackbar("Not an office time")
                                     }
@@ -487,6 +585,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     try {
                                         attendanceState.markAttendance()
                                         coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Marked at ${attendanceState.attendanceMarkedTime.value}")
                                             delay(3000)
                                             attendanceState.resetZoneVisibility()
                                         }
@@ -501,9 +600,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 .fillMaxWidth()
                                 .alpha(if (isOfficeTime) 1f else 0.5f), // Faded when not office time
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isInOfficeZone) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
+                                containerColor = if (isInOfficeZone && internetConnected) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
                             ),
-                            enabled = markAttendanceEnabled, // Always enabled if attendance is allowed
+                            enabled = markAttendanceEnabled && isOfficeTime && !attendanceState.isAttendanceMarkedToday() && internetConnected, // Only enabled during office hours, if not already marked, and internet is connected
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             if (isNearOfficeZone) {
@@ -513,7 +612,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            Text(text = "Mark Attendance", color = Color.White)
+                            Text(
+                                text = if (attendanceState.isAttendanceMarkedToday()) "Attendance Marked" else "Mark Attendance", 
+                                color = Color.White
+                            )
                         }
                         if (showZoneWarning) {
                             LaunchedEffect(showZoneWarning) {
@@ -522,7 +624,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             }
                         }
                         AnimatedVisibility(
-                            visible = withinZoneVisible && isInOfficeZone && locationServicesEnabled,
+                            visible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected,
                             enter = fadeIn(),
                             exit = fadeOut()
                         ) {
@@ -561,7 +663,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         .fillMaxWidth()
                         .padding(bottom = 20.dp)
                         .shadow(1.dp, RoundedCornerShape(12.dp))
-                        .height(200.dp),
+                        .height(240.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
                     Column(
@@ -580,7 +682,12 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = "Check-in time", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
-                            Text(text = "08:45 AM", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = checkInTime ?: "Not marked", 
+                                fontWeight = FontWeight.Medium, 
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (checkInTime != null) Color(0xFF4B89DC) else Color.Gray
+                            )
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(
@@ -588,7 +695,25 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = "Working hours", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
-                            Text(text = "5h 15m", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = workingHours, 
+                                fontWeight = FontWeight.Medium, 
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (workingHours != "0h 0m 0s") Color(0xFF4B89DC) else Color.Gray
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Attendance", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = attendanceStatus, 
+                                fontWeight = FontWeight.Bold, 
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (attendanceStatus == "Present") Color(0xFF4B89DC) else Color.Red
+                            )
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(
