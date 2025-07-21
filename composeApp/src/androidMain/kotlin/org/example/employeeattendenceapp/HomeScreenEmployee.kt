@@ -269,8 +269,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) && now.isBefore(officeEndTime.plusNanos(1))
 
     // Office location (from user):
-    val officeLat = 29.369808
-    val officeLon = 79.560637
+    val officeLat = 29.275748
+    val officeLon = 79.545030
 
     // Helper to calculate distance between two lat/lon points (in meters)
     fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
@@ -338,6 +338,43 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         } else {
             // Outside office zone during office hours
             attendanceState.setStatusDash()
+        }
+    }
+
+    // Real-time database sync for attendance
+    val userEmail = FirebaseAuth.getInstance().currentUser?.email
+    val userName = userEmail?.substringBefore("@") ?: "Employee"
+    val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val currentDate = LocalDate.now()
+    val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    val dayFormatter = DateTimeFormatter.ofPattern("EEEE")
+    val formattedDate = currentDate.format(dateFormatter)
+    val formattedDay = currentDate.format(dayFormatter)
+
+    LaunchedEffect(
+        userName,
+        formattedDate,
+        formattedDay,
+        latitude,
+        longitude,
+        checkInTime,
+        workingHours,
+        attendanceStatus,
+        statusText
+    ) {
+        if (uid.isNotEmpty()) {
+            org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
+                uid = uid,
+                name = userName,
+                date = formattedDate,
+                day = formattedDay,
+                latitude = latitude,
+                longitude = longitude,
+                checkInTime = checkInTime ?: "Not Marked",
+                workingHours = workingHours,
+                attendance = attendanceStatus,
+                status = statusText
+            )
         }
     }
 

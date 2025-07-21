@@ -93,3 +93,30 @@ actual fun clearUserRole(context: Any) {
     val ctx = context as Context
     getPrefs(ctx).edit().remove(KEY_USER_ROLE).apply()
 }
+
+fun updateEmployeeAttendance(
+    uid: String,
+    name: String,
+    date: String,
+    day: String,
+    latitude: Double?,
+    longitude: Double?,
+    checkInTime: String,
+    workingHours: String,
+    attendance: String,
+    status: String
+) {
+    val dbRef = FirebaseDatabase.getInstance().getReference("attendance").child(uid)
+    val attendanceData = mapOf(
+        "name" to name,
+        "date" to date,
+        "day" to day,
+        "latitude" to latitude,
+        "longitude" to longitude,
+        "checkInTime" to checkInTime,
+        "workingHours" to workingHours,
+        "attendance" to attendance,
+        "status" to status
+    )
+    dbRef.setValue(attendanceData)
+}
