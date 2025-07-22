@@ -306,37 +306,28 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 
-    // Remove markAttendance logic for status
-    // Real-time status update based on location
-    val isWithin20m = latitude != null && longitude != null &&
-        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 20
+    // Update working hours on every tick to ensure transitions are handled
+    LaunchedEffect(now, isInOfficeZone) {
+        attendanceState.updateWorkingHours(now, isInOfficeZone)
+    }
 
     // Real-time status update based on location, office hours, and internet connectivity
-    LaunchedEffect(isWithin20m, isOfficeTime, now, internetConnected) {
-        // Update working hours every time location or time changes
-        attendanceState.updateWorkingHours(now, isInOfficeZone)
-        
+    LaunchedEffect(isInOfficeZone, isOfficeTime, internetConnected, locationServicesEnabled) {
         if (!internetConnected) {
-            // No internet connection - set status to --
             attendanceState.setStatusDash()
         } else if (attendanceState.isAttendanceMarkedToday()) {
-            // If attendance is already marked today, set attendance status to Present but keep status as Active or --
             attendanceState.setStatusPresent()
-            // Status text remains Active or -- based on location
-            if (isWithin20m) {
+            if (isInOfficeZone) {
                 attendanceState.setStatusActive()
             } else {
                 attendanceState.setStatusDash()
             }
         } else if (!isOfficeTime) {
-            // Outside office hours, set attendance to Absent and status to --
             attendanceState.setStatusAbsent()
             attendanceState.setStatusDash()
-        } else if (isWithin20m) {
-            // Within office zone during office hours
+        } else if (isInOfficeZone) {
             attendanceState.setStatusActive()
         } else {
-            // Outside office zone during office hours
             attendanceState.setStatusDash()
         }
     }
@@ -360,9 +351,17 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         checkInTime,
         workingHours,
         attendanceStatus,
-        statusText
+        statusText,
+        isInOfficeZone,
+        locationServicesEnabled,
+        internetConnected
     ) {
-        if (uid.isNotEmpty()) {
+        if (
+            uid.isNotEmpty() &&
+            isInOfficeZone &&
+            locationServicesEnabled &&
+            internetConnected
+        ) {
             org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
                 uid = uid,
                 name = userName,

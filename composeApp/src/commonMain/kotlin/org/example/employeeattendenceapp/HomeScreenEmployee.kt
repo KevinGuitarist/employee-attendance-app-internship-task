@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable // only if supported by JetBrains Com
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.time.Duration
 
 class EmployeeAttendanceState {
     private val _statusText = MutableStateFlow("Active")
@@ -37,6 +38,11 @@ class EmployeeAttendanceState {
     private val _workingHours = MutableStateFlow("0h 0m 0s")
     val workingHours: StateFlow<String> = _workingHours
 
+    // New: Accumulated working duration and last zone entry time
+    private var totalWorkingDuration: Duration = Duration.ZERO
+    private var lastZoneEntryTime: LocalTime? = null
+    private var wasInOfficeZone: Boolean = false
+
     fun markAttendance() {
         val currentTime = LocalTime.now()
         val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
@@ -49,8 +55,10 @@ class EmployeeAttendanceState {
         _markAttendanceEnabled.value = false
         _withinZoneVisible.value = false
         _lastAttendanceDate.value = LocalDate.now()
-        
-        // Keep statusText as Active or -- (don't change to Present)
+        // Reset accumulators
+        totalWorkingDuration = Duration.ZERO
+        lastZoneEntryTime = null
+        wasInOfficeZone = false
     }
 
     fun updateWorkingHours(currentTime: LocalTime, isInOfficeZone: Boolean) {
@@ -58,27 +66,44 @@ class EmployeeAttendanceState {
         if (checkIn != null) {
             val officeStartTime = LocalTime.of(9, 0)
             val officeEndTime = LocalTime.of(18, 0)
-            
-            // Calculate working hours only during office time and when in office zone
-            val startTime = if (checkIn.isBefore(officeStartTime)) officeStartTime else checkIn
-            val endTime = if (currentTime.isAfter(officeEndTime)) officeEndTime else currentTime
-            
-            // Only calculate if current time is within or after office hours AND employee is in office zone
-            if ((currentTime.isAfter(officeStartTime) || currentTime.equals(officeStartTime)) && isInOfficeZone) {
-                val duration = java.time.Duration.between(startTime, endTime)
-                val hours = duration.toHours()
-                val minutes = duration.toMinutesPart()
-                val seconds = duration.toSecondsPart()
-                
-                _workingHours.value = "${hours}h ${minutes}m ${seconds}s"
-            } else {
-                // If outside office zone, keep the last calculated time (don't reset to 0)
-                // Only reset to 0 if it's before office hours
-                if (currentTime.isBefore(officeStartTime)) {
-                    _workingHours.value = "0h 0m 0s"
-                }
-                // If outside office zone during office hours, keep the last calculated time
+            val now = currentTime
+            val boundedNow = if (now.isAfter(officeEndTime)) officeEndTime else if (now.isBefore(officeStartTime)) officeStartTime else now
+
+            // Detect transition: out-of-zone -> in-zone
+            if (isInOfficeZone && !wasInOfficeZone) {
+                // Just entered zone, start timing from now
+                lastZoneEntryTime = boundedNow
             }
+            // Detect transition: in-zone -> out-of-zone
+            if (!isInOfficeZone && wasInOfficeZone) {
+                // Just left zone, accumulate time
+                if (lastZoneEntryTime != null) {
+                    val entry = lastZoneEntryTime!!
+                    if (!entry.isBefore(officeStartTime) && !entry.isAfter(officeEndTime)) {
+                        val duration = Duration.between(entry, boundedNow)
+                        if (!duration.isNegative && !duration.isZero) {
+                            totalWorkingDuration = totalWorkingDuration.plus(duration)
+                        }
+                    }
+                }
+                lastZoneEntryTime = null
+            }
+            // Display logic
+            val displayDuration = if (isInOfficeZone && lastZoneEntryTime != null) {
+                val duration = Duration.between(lastZoneEntryTime, boundedNow)
+                if (!duration.isNegative && !duration.isZero) {
+                    totalWorkingDuration.plus(duration)
+                } else {
+                    totalWorkingDuration
+                }
+            } else {
+                totalWorkingDuration
+            }
+            val hours = displayDuration.toHours()
+            val minutes = displayDuration.toMinutesPart()
+            val seconds = displayDuration.toSecondsPart()
+            _workingHours.value = "${hours}h ${minutes}m ${seconds}s"
+            wasInOfficeZone = isInOfficeZone
         }
     }
 
@@ -93,6 +118,10 @@ class EmployeeAttendanceState {
             _markAttendanceEnabled.value = true
             _withinZoneVisible.value = true
             _lastAttendanceDate.value = null
+            // Reset accumulators
+            totalWorkingDuration = Duration.ZERO
+            lastZoneEntryTime = null
+            wasInOfficeZone = false
         }
     }
 
