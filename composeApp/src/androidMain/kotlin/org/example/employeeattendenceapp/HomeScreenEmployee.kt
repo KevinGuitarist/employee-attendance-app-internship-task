@@ -315,6 +315,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     LaunchedEffect(isInOfficeZone, isOfficeTime, internetConnected, locationServicesEnabled) {
         if (!internetConnected) {
             attendanceState.setStatusDash()
+        } else if (!locationServicesEnabled) {
+            attendanceState.setStatusDash()
         } else if (attendanceState.isAttendanceMarkedToday()) {
             attendanceState.setStatusPresent()
             if (isInOfficeZone) {
@@ -356,12 +358,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         locationServicesEnabled,
         internetConnected
     ) {
-        if (
-            uid.isNotEmpty() &&
-            isInOfficeZone &&
-            locationServicesEnabled &&
-            internetConnected
-        ) {
+        if (uid.isNotEmpty() && internetConnected) {
             org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
                 uid = uid,
                 name = userName,
