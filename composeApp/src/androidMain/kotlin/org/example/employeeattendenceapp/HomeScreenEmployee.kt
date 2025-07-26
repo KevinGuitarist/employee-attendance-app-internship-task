@@ -77,6 +77,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val attendanceMarkedTime by attendanceState.attendanceMarkedTime.collectAsState(initial = null)
     val workingHours by attendanceState.workingHours.collectAsState(initial = "0h 0m 0s")
 
+
     // Location state
     var latitude by remember { mutableStateOf<Double?>(null) }
     var longitude by remember { mutableStateOf<Double?>(null) }
@@ -281,7 +282,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     // State: is user in office zone?
     val isInOfficeZone = latitude != null && longitude != null &&
-        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 20
+        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 100
 
     // Show loading spinner if user is near the office zone boundary (within 20m but not in 10m zone)
     val isNearOfficeZone = latitude != null && longitude != null &&
@@ -596,10 +597,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         .shadow(1.dp, RoundedCornerShape(12.dp)),
                     colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                    var isSignedOff by remember { mutableStateOf(false) }
+
+                    Column {
+                        // Mark Attendance Button
                         Button(
                             onClick = {
                                 if (!internetConnected) {
@@ -631,11 +632,16 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .alpha(if (isOfficeTime) 1f else 0.5f), // Faded when not office time
+                                .alpha(if (isOfficeTime && !isSignedOff) 1f else 0.5f),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (isInOfficeZone && internetConnected) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
                             ),
-                            enabled = markAttendanceEnabled && isOfficeTime && !attendanceState.isAttendanceMarkedToday() && internetConnected, // Only enabled during office hours, if not already marked, and internet is connected
+                            enabled = !isSignedOff &&
+                                    markAttendanceEnabled &&
+                                    isOfficeTime &&
+                                    !attendanceState.isAttendanceMarkedToday() &&
+                                    internetConnected
+                            ,
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             if (isNearOfficeZone) {
@@ -646,16 +652,37 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
                             Text(
-                                text = if (attendanceState.isAttendanceMarkedToday()) "Attendance Marked" else "Mark Attendance", 
+                                text = if (attendanceState.isAttendanceMarkedToday()) "Attendance Marked" else "Mark Attendance",
                                 color = Color.White
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Signing Off Button
+                        Button(
+                            onClick = {
+                                isSignedOff = true
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("You have signed off. Attendance marking disabled.")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFd32f2f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Signing Off", color = Color.White)
+                        }
+
+                        // Optional Zone Message
                         if (showZoneWarning) {
                             LaunchedEffect(showZoneWarning) {
                                 snackbarHostState.showSnackbar("You can't mark attendance. You are not in office.")
                                 showZoneWarning = false
                             }
                         }
+
+                        // Zone Visibility Banner
                         AnimatedVisibility(
                             visible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected,
                             enter = fadeIn(),
@@ -665,18 +692,18 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 12.dp)
-                                    .height(64.dp), // Increased height for the box
+                                    .height(64.dp),
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFE2F6D6))
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(16.dp), // Increased padding for more space
+                                    modifier = Modifier.padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
                                         painter = painterResource(id = R.drawable.check_circle),
                                         contentDescription = "Within Zone",
                                         tint = Color(0xFF38761D),
-                                        modifier = Modifier.size(36.dp) // Increased icon size
+                                        modifier = Modifier.size(36.dp)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
@@ -688,6 +715,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             }
                         }
                     }
+
                 }
 
                 // Today's Stats Card
