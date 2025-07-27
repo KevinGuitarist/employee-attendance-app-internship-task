@@ -11,7 +11,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -312,7 +311,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             attendanceState.setStatusDash()
         } else if (attendanceState.isAttendanceMarkedToday()) {
             attendanceState.setStatusPresent()
-            // Always update status text based on location, even after marking attendance
             if (isInOfficeZone) {
                 attendanceState.setStatusActive()
             } else {
@@ -363,7 +361,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                 checkInTime = checkInTime ?: "Not Marked",
                 workingHours = workingHours,
                 attendance = attendanceStatus,
-                status = statusText // This will now correctly reflect current location state
+                status = statusText
             )
         }
     }
@@ -653,11 +651,38 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         Spacer(modifier = Modifier.height(12.dp))
 
                         // Signing Off Button
+                        // In the HomeScreenEmployee composable, update the Signing Off Button section:
                         Button(
                             onClick = {
-                                isSignedOff = true
                                 coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("You have signed off. Attendance marking disabled.")
+                                    try {
+                                        // Save data to Firebase
+                                        org.example.employeeattendenceapp.Auth.saveDailyRecord(
+                                            uid = uid,
+                                            name = userName,
+                                            date = formattedDate,
+                                            day = formattedDay,
+                                            checkInTime = checkInTime ?: "Not Marked",
+                                            workingHours = workingHours,
+                                            attendance = attendanceStatus,
+                                            status = statusText,
+                                            onSuccess = {
+                                                coroutineScope.launch {
+                                                    attendanceState.resetForNewDay()
+                                                    snackbarHostState.showSnackbar("Signed off. Data saved successfully!")
+                                                }
+                                            },
+                                            onError = { error ->
+                                                coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar("Error saving data: $error")
+                                                }
+                                            }
+                                        )
+                                    } catch (e: Exception) {
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Error: ${e.localizedMessage}")
+                                        }
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -665,14 +690,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Signing Off", color = Color.White)
-                        }
-
-                        // Optional Zone Message
-                        if (showZoneWarning) {
-                            LaunchedEffect(showZoneWarning) {
-                                snackbarHostState.showSnackbar("You can't mark attendance. You are not in office.")
-                                showZoneWarning = false
-                            }
                         }
 
                         // Zone Visibility Banner

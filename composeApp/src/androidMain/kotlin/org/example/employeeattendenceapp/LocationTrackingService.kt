@@ -85,22 +85,21 @@ class LocationTrackingService : Service() {
         }
     }
 
+    // In LocationTrackingService.kt
     private fun requestLocationUpdates() {
-        val locationRequest = LocationRequest.create().apply {
-            interval = 10000 // 10 seconds
-            fastestInterval = 5000 // 5 seconds
-            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-        }
+        val locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            1000 // 1 second interval
+        ).apply {
+            setMinUpdateIntervalMillis(500) // Minimum 0.5s
+            setMaxUpdateDelayMillis(1500)  // Maximum 1.5s delay
+        }.build()
 
-        try {
-            fusedLocationClient.requestLocationUpdates(
-                locationRequest,
-                locationCallback,
-                Looper.getMainLooper()
-            )
-        } catch (e: SecurityException) {
-            // Handle permission exception
-        }
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            locationCallback,
+            Looper.getMainLooper()
+        )
     }
 
     private fun updateFirebase(location: Location) {

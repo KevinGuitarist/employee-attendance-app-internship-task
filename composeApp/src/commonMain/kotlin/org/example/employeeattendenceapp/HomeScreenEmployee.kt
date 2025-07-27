@@ -107,24 +107,6 @@ class EmployeeAttendanceState {
         }
     }
 
-    fun resetForNewDay() {
-        val today = LocalDate.now()
-        if (_lastAttendanceDate.value != today) {
-            _checkInTime.value = null
-            _checkInTimeStamp.value = null
-            _attendanceStatus.value = "Absent"
-            _attendanceMarkedTime.value = null
-            _workingHours.value = "0h 0m 0s"
-            _markAttendanceEnabled.value = true
-            _withinZoneVisible.value = true
-            _lastAttendanceDate.value = null
-            // Reset accumulators
-            totalWorkingDuration = Duration.ZERO
-            lastZoneEntryTime = null
-            wasInOfficeZone = false
-        }
-    }
-
     fun resetZoneVisibility() {
         _withinZoneVisible.value = true
     }
@@ -153,6 +135,21 @@ class EmployeeAttendanceState {
 
     fun isAttendanceMarkedToday(): Boolean {
         return _lastAttendanceDate.value == LocalDate.now()
+    }
+
+    fun resetForNewDay() {
+        _checkInTime.value = null
+        _checkInTimeStamp.value = null
+        _attendanceStatus.value = "Absent"
+        _attendanceMarkedTime.value = null
+        _workingHours.value = "0h 0m 0s"
+        _statusText.value = "--"
+        _markAttendanceEnabled.value = true
+        _withinZoneVisible.value = true
+        _lastAttendanceDate.value = null
+        totalWorkingDuration = Duration.ZERO
+        lastZoneEntryTime = null
+        wasInOfficeZone = false
     }
 }
 

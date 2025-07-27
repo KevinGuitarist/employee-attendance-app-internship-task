@@ -121,24 +121,30 @@ fun updateEmployeeAttendance(
     dbRef.setValue(attendanceData)
 }
 
-fun updateBackgroundAttendance(
+// Add this function to FirebaseAuthHelper.kt
+fun saveDailyRecord(
     uid: String,
     name: String,
     date: String,
     day: String,
-    latitude: Double?,
-    longitude: Double?,
-    status: String
+    checkInTime: String,
+    workingHours: String,
+    attendance: String,
+    status: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
 ) {
-    val dbRef = FirebaseDatabase.getInstance().getReference("background_attendance").child(uid)
-    val attendanceData = mapOf(
+    val dbRef = FirebaseDatabase.getInstance().getReference("daily_records").child(uid).child(date)
+    val recordData = mapOf(
         "name" to name,
         "date" to date,
         "day" to day,
-        "latitude" to latitude,
-        "longitude" to longitude,
-        "status" to status,
-        "timestamp" to System.currentTimeMillis()
+        "checkInTime" to checkInTime,
+        "workingHours" to workingHours,
+        "attendance" to attendance,
+        "status" to status
     )
-    dbRef.setValue(attendanceData)
+    dbRef.setValue(recordData)
+        .addOnSuccessListener { onSuccess() }
+        .addOnFailureListener { e -> onError(e.localizedMessage ?: "Failed to save daily record") }
 }
