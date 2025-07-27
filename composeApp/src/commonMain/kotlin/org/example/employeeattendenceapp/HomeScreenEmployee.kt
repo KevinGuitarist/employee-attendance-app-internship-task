@@ -130,24 +130,19 @@ class EmployeeAttendanceState {
     }
 
     fun setStatusActive() {
-        // Only set to Active if attendance hasn't been marked today
-        if (_lastAttendanceDate.value != LocalDate.now()) {
-            _statusText.value = "Active"
-        }
+        // Remove the attendance check - we want to show Active status whenever in zone
+        _statusText.value = "Active"
     }
 
     fun setStatusDash() {
-        // Only set to -- if attendance hasn't been marked today
-        if (_lastAttendanceDate.value != LocalDate.now()) {
-            _statusText.value = "--"
-        }
+        // Remove the attendance check - we want to show -- status whenever out of zone
+        _statusText.value = "--"
     }
 
     fun setStatusAbsent() {
         // Only set to Absent if attendance hasn't been marked today
         if (_lastAttendanceDate.value != LocalDate.now()) {
             _attendanceStatus.value = "Absent"
-            // Don't change statusText here - keep it as Active or --
         }
     }
 

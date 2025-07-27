@@ -312,6 +312,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             attendanceState.setStatusDash()
         } else if (attendanceState.isAttendanceMarkedToday()) {
             attendanceState.setStatusPresent()
+            // Always update status text based on location, even after marking attendance
             if (isInOfficeZone) {
                 attendanceState.setStatusActive()
             } else {
@@ -362,7 +363,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                 checkInTime = checkInTime ?: "Not Marked",
                 workingHours = workingHours,
                 attendance = attendanceStatus,
-                status = statusText
+                status = statusText // This will now correctly reflect current location state
             )
         }
     }
