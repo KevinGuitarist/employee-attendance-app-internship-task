@@ -120,3 +120,25 @@ fun updateEmployeeAttendance(
     )
     dbRef.setValue(attendanceData)
 }
+
+fun updateBackgroundAttendance(
+    uid: String,
+    name: String,
+    date: String,
+    day: String,
+    latitude: Double?,
+    longitude: Double?,
+    status: String
+) {
+    val dbRef = FirebaseDatabase.getInstance().getReference("background_attendance").child(uid)
+    val attendanceData = mapOf(
+        "name" to name,
+        "date" to date,
+        "day" to day,
+        "latitude" to latitude,
+        "longitude" to longitude,
+        "status" to status,
+        "timestamp" to System.currentTimeMillis()
+    )
+    dbRef.setValue(attendanceData)
+}

@@ -1,71 +1,69 @@
 package org.example.employeeattendenceapp
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.ui.platform.LocalContext
 import android.app.Activity
-import android.content.Intent
-import androidx.compose.ui.draw.clip
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import org.example.employeeattendenceapp.Auth.signOut
-import androidx.compose.runtime.collectAsState
-import org.example.employeeattendenceapp.Auth.clearUserRole
-import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.layout.ContentScale
-import com.google.firebase.auth.FirebaseAuth
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import com.google.android.gms.location.LocationServices
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberPermissionState
-import com.google.accompanist.permissions.isGranted
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationResult
-import androidx.compose.runtime.DisposableEffect
-import android.location.Location
-import android.location.LocationManager
-import android.content.IntentFilter
 import android.content.BroadcastReceiver
 import android.content.Context
-import android.os.Build
-import java.time.LocalTime
-import androidx.compose.ui.draw.alpha
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import android.content.Intent
+import android.content.IntentFilter
+import android.location.Location
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import com.google.android.gms.location.*
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.example.employeeattendenceapp.Auth.clearUserRole
+import org.example.employeeattendenceapp.Auth.signOut
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
+
+    // Start service when composable launches
+    LaunchedEffect(Unit) {
+        LocationTrackingService.startService(context)
+    }
 
     // Use business logic state from commonMain
     val attendanceState = remember { EmployeeAttendanceState() }
@@ -76,7 +74,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val attendanceStatus by attendanceState.attendanceStatus.collectAsState(initial = "Absent")
     val attendanceMarkedTime by attendanceState.attendanceMarkedTime.collectAsState(initial = null)
     val workingHours by attendanceState.workingHours.collectAsState(initial = "0h 0m 0s")
-
 
     // Location state
     var latitude by remember { mutableStateOf<Double?>(null) }
@@ -98,11 +95,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     if (locationPermissionState.status.isGranted) {
         val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
         val locationRequest = remember {
-            LocationRequest.create().apply {
-                interval = 1000 // 1 second
-                fastestInterval = 500 // 0.5 seconds
-                priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-            }
+            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000).apply {
+                setMinUpdateIntervalMillis(500)
+            }.build()
         }
 
         // Show last known location immediately if available
@@ -173,10 +168,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         val network = connectivityManager.activeNetwork
         val capabilities = connectivityManager.getNetworkCapabilities(network)
         return capabilities != null && (
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-        )
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                )
     }
 
     // Listen for location services changes
@@ -187,11 +182,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             }
         }
         val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            context.registerReceiver(receiver, filter)
-        } else {
-            context.registerReceiver(receiver, filter)
-        }
+        context.registerReceiver(receiver, filter)
+
         // Set initial state
         locationServicesEnabled = isLocationEnabled(context)
         onDispose {
@@ -202,7 +194,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     // Listen for internet connectivity changes
     DisposableEffect(Unit) {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        
+
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 internetConnected = true
@@ -222,10 +214,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             .build()
 
         connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
-        
+
         // Set initial state
         internetConnected = isInternetConnected(context)
-        
+
         onDispose {
             connectivityManager.unregisterNetworkCallback(networkCallback)
         }
@@ -276,17 +268,17 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     // Helper to calculate distance between two lat/lon points (in meters)
     fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
         val result = FloatArray(1)
-        android.location.Location.distanceBetween(lat1, lon1, lat2, lon2, result)
+        Location.distanceBetween(lat1, lon1, lat2, lon2, result)
         return result[0]
     }
 
     // State: is user in office zone?
     val isInOfficeZone = latitude != null && longitude != null &&
-        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 100
+            distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 100
 
     // Show loading spinner if user is near the office zone boundary (within 20m but not in 10m zone)
     val isNearOfficeZone = latitude != null && longitude != null &&
-        distanceBetween(latitude!!, longitude!!, officeLat, officeLon) in 10.0..20.0
+            distanceBetween(latitude!!, longitude!!, officeLat, officeLon) in 10.0..20.0
 
     // State for attendance button warning
     var showZoneWarning by remember { mutableStateOf(false) }
@@ -389,11 +381,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     attendanceState.resetZoneVisibility()
 
                     // Request a single high-accuracy location update
-                    val locationRequest = LocationRequest.create().apply {
-                        priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-                        numUpdates = 1
-                        interval = 0
-                    }
+                    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 0).apply {
+                        setMaxUpdates(1)  // Fixed: setMaxUpdates instead of setNumUpdates
+                    }.build()
 
                     val locationCallback = object : LocationCallback() {
                         override fun onLocationResult(result: LocationResult) {
@@ -409,7 +399,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 if (remaining > 0) delay(remaining)
                                 isRefreshing = false
                             }
-                            // Remove updates after receiving the location
                             fusedLocationClient.removeLocationUpdates(this)
                         }
                     }
@@ -480,6 +469,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         // Logout
                         IconButton(
                             onClick = {
+                                // Stop service when logging out
+                                LocationTrackingService.stopService(context)
+
                                 signOut()
                                 clearUserRole(context)
                                 if (context is Activity) {
@@ -744,8 +736,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         ) {
                             Text(text = "Check-in time", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                text = checkInTime ?: "Not marked", 
-                                fontWeight = FontWeight.Medium, 
+                                text = checkInTime ?: "Not marked",
+                                fontWeight = FontWeight.Medium,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (checkInTime != null) Color(0xFF4B89DC) else Color.Gray
                             )
@@ -757,8 +749,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         ) {
                             Text(text = "Working hours", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                text = workingHours, 
-                                fontWeight = FontWeight.Medium, 
+                                text = workingHours,
+                                fontWeight = FontWeight.Medium,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (workingHours != "0h 0m 0s") Color(0xFF4B89DC) else Color.Gray
                             )
@@ -770,8 +762,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         ) {
                             Text(text = "Attendance", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                text = attendanceStatus, 
-                                fontWeight = FontWeight.Bold, 
+                                text = attendanceStatus,
+                                fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (attendanceStatus == "Present") Color(0xFF4B89DC) else Color.Red
                             )
@@ -799,4 +791,3 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 }
-
