@@ -45,6 +45,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
 
     val presentCount = 42
     val absentCount = 5
+    val notMarkedCount = 8 // Added not marked count
 
     val recentAttendance = listOf(
         Triple("John Davis", "Checked in at 8:45 AM", "Present"),
@@ -121,11 +122,15 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Attendance Overview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Attendance Overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("Today", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4B89DC))
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Present Card
                 Card(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
@@ -139,6 +144,8 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                         Text("Present", style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray)
                     }
                 }
+
+                // Absent Card
                 Card(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
@@ -150,6 +157,21 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     ) {
                         Text("$absentCount", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text("Absent", style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray)
+                    }
+                }
+
+                // Not Marked Card (New Card)
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE0E0E0))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("$notMarkedCount", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                        Text("Not Marked", style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray)
                     }
                 }
             }
