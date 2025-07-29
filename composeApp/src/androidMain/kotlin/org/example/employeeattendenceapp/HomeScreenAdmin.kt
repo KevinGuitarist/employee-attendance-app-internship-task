@@ -24,16 +24,85 @@ import org.example.employeeattendenceapp.Auth.signOut
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val currentUser = FirebaseAuth.getInstance().currentUser
+    val database = Firebase.database.reference
+    val coroutineScope = rememberCoroutineScope()
+
+    // State variables
+    var presentCount by remember { mutableStateOf(0) }
+    var absentCount by remember { mutableStateOf(0) }
+    var notMarkedCount by remember { mutableStateOf(0) }
+    var totalEmployees by remember { mutableStateOf(0) }
+    val todayDate = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
 
     // Extract name from authenticated user's email
     val adminName = remember(currentUser) {
         currentUser?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: "Admin"
+    }
+
+    // Fetch attendance data from Firebase
+    LaunchedEffect(Unit) {
+        val usersRef = database.child("users")
+        val dailyRecordsRef = database.child("daily_records").child(todayDate)
+
+        // Get total employees count (only those with role "employee")
+        usersRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                var count = 0
+                snapshot.children.forEach { child ->
+                    if (child.child("role").getValue(String::class.java) == "employee") {
+                        count++
+                    }
+                }
+                totalEmployees = count
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Error loading employee count")
+                }
+            }
+        })
+
+        // Get today's attendance from daily_records
+        dailyRecordsRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                var present = 0
+                var absent = 0
+                val markedEmployees = mutableSetOf<String>()
+
+                snapshot.children.forEach { employeeSnapshot ->
+                    when (employeeSnapshot.child("attendance").getValue(String::class.java)) {
+                        "Present" -> present++
+                        "Absent" -> absent++
+                    }
+                    markedEmployees.add(employeeSnapshot.key ?: "")
+                }
+
+                presentCount = present
+                absentCount = absent
+                notMarkedCount = totalEmployees - markedEmployees.size
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Error loading attendance data")
+                }
+            }
+        })
     }
 
     if (justLoggedIn) {
@@ -42,10 +111,6 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
             snackbarHostState.showSnackbar("Logged in successfully!")
         }
     }
-
-    val presentCount = 42
-    val absentCount = 5
-    val notMarkedCount = 8 // Added not marked count
 
     val recentAttendance = listOf(
         Triple("John Davis", "Checked in at 8:45 AM", "Present"),
@@ -160,7 +225,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     }
                 }
 
-                // Not Marked Card (New Card)
+                // Not Marked Card
                 Card(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
@@ -173,6 +238,31 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                         Text("$notMarkedCount", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text("Not Marked", style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray)
                     }
+                }
+            }
+
+            // Total Employees Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Total Employees",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "$totalEmployees",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4B89DC)
+                    )
                 }
             }
 

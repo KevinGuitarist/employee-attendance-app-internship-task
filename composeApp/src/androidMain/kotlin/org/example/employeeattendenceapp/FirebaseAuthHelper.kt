@@ -134,7 +134,10 @@ fun saveDailyRecord(
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
-    val dbRef = FirebaseDatabase.getInstance().getReference("daily_records").child(uid).child(date)
+    val dbRef = FirebaseDatabase.getInstance().getReference("daily_records")
+        .child(date)
+        .child(uid)  // Changed from child(uid).child(date) to child(date).child(uid)
+
     val recordData = mapOf(
         "name" to name,
         "date" to date,
