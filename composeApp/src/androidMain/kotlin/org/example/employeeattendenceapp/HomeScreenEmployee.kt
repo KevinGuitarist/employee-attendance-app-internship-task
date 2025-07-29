@@ -38,12 +38,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import android.provider.Settings
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
@@ -65,6 +64,34 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
+    // Request location permission
+    val locationPermissionState = rememberPermissionState(
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
+    // State to control permission UI
+    var showLocationSettingsDialog by remember { mutableStateOf(false) }
+
+    if (showLocationSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showLocationSettingsDialog = false },
+            title = { Text("Enable Location Services") },
+            text = { Text("Location services are required for attendance tracking. Please enable location services.") },
+            confirmButton = {
+                Button(onClick = {
+                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    showLocationSettingsDialog = false
+                }) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLocationSettingsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Request foreground location first, then background if needed
     val foregroundLocationPermission = rememberPermissionState(
         Manifest.permission.ACCESS_FINE_LOCATION
@@ -75,6 +102,51 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     // State to control permission UI
     var showPermissionRationale by remember { mutableStateOf(false) }
+
+    // Function to check location services and start tracking
+    fun checkLocationServicesAndStart(context: Context) {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            showLocationSettingsDialog = true
+        } else {
+            LocationTrackingService.startService(context)
+        }
+    }
+
+    // Check permissions when composable launches
+    LaunchedEffect(Unit) {
+        if (!locationPermissionState.status.isGranted) {
+            showPermissionRationale = true
+        } else {
+            checkLocationServicesAndStart(context)
+        }
+    }
+
+    // Handle permission results
+    LaunchedEffect(locationPermissionState.status) {
+        when {
+            locationPermissionState.status.isGranted -> {
+                checkLocationServicesAndStart(context)
+                showPermissionRationale = false
+            }
+            locationPermissionState.status is PermissionStatus.Denied -> {
+                showPermissionRationale = true
+            }
+        }
+    }
+
+    // Show permission rationale UI if needed
+    if (showPermissionRationale) {
+        PermissionRationaleDialog(
+            onRequestPermission = {
+                locationPermissionState.launchPermissionRequest()
+            },
+            onDismiss = {
+                showPermissionRationale = false
+            }
+        )
+        return
+    }
 
     // Check permissions when composable launches
     LaunchedEffect(Unit) {

@@ -51,12 +51,7 @@ class LocationTrackingService : Service() {
             return ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED &&
-                    (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-                            ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                            ) == PackageManager.PERMISSION_GRANTED)
+            ) == PackageManager.PERMISSION_GRANTED
         }
     }
 
@@ -80,12 +75,7 @@ class LocationTrackingService : Service() {
         return ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED &&
-                (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-                        ContextCompat.checkSelfPermission(
-                            this,
-                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED)
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun startForegroundServiceWithLocation() {
@@ -151,7 +141,6 @@ class LocationTrackingService : Service() {
                 Looper.getMainLooper()
             )
         } catch (e: SecurityException) {
-            // Handle permission exception
             stopSelf()
         }
     }
