@@ -1,16 +1,20 @@
 package org.example.employeeattendenceapp
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
@@ -30,7 +34,9 @@ class LocationTrackingService : Service() {
         fun startService(context: Context) {
             val intent = Intent(context, LocationTrackingService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
+                if (hasRequiredPermissions(context)) {
+                    context.startForegroundService(intent)
+                }
             } else {
                 context.startService(intent)
             }
@@ -39,6 +45,18 @@ class LocationTrackingService : Service() {
         fun stopService(context: Context) {
             val intent = Intent(context, LocationTrackingService::class.java)
             context.stopService(intent)
+        }
+
+        private fun hasRequiredPermissions(context: Context): Boolean {
+            return ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED &&
+                    (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                            ) == PackageManager.PERMISSION_GRANTED)
         }
     }
 
@@ -50,9 +68,38 @@ class LocationTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, createNotification())
-        requestLocationUpdates()
+        if (hasRequiredPermissions()) {
+            startForegroundServiceWithLocation()
+        } else {
+            stopSelf()
+        }
         return START_STICKY
+    }
+
+    private fun hasRequiredPermissions(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED &&
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                        ContextCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED)
+    }
+
+    private fun startForegroundServiceWithLocation() {
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+        requestLocationUpdates()
     }
 
     private fun createNotificationChannel() {
@@ -61,7 +108,9 @@ class LocationTrackingService : Service() {
                 CHANNEL_ID,
                 "Location Tracking Service",
                 NotificationManager.IMPORTANCE_LOW
-            )
+            ).apply {
+                description = "Tracks employee location for attendance"
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
         }
@@ -72,6 +121,7 @@ class LocationTrackingService : Service() {
             .setContentTitle("Employee Attendance")
             .setContentText("Tracking your location for attendance")
             .setSmallIcon(R.drawable.ic_notification)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
@@ -85,21 +135,25 @@ class LocationTrackingService : Service() {
         }
     }
 
-    // In LocationTrackingService.kt
     private fun requestLocationUpdates() {
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            1000 // 1 second interval
+            1000
         ).apply {
-            setMinUpdateIntervalMillis(500) // Minimum 0.5s
-            setMaxUpdateDelayMillis(1500)  // Maximum 1.5s delay
+            setMinUpdateIntervalMillis(500)
+            setMaxUpdateDelayMillis(1500)
         }.build()
 
-        fusedLocationClient.requestLocationUpdates(
-            locationRequest,
-            locationCallback,
-            Looper.getMainLooper()
-        )
+        try {
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+        } catch (e: SecurityException) {
+            // Handle permission exception
+            stopSelf()
+        }
     }
 
     private fun updateFirebase(location: Location) {
@@ -115,7 +169,6 @@ class LocationTrackingService : Service() {
         val formattedDay = currentDate.format(dayFormatter)
         val currentTime = LocalTime.now().format(timeFormatter)
 
-        // Calculate status based on office time and location
         val officeLat = 29.275748
         val officeLon = 79.545030
         val isInOfficeZone = distanceBetween(
@@ -144,9 +197,9 @@ class LocationTrackingService : Service() {
                 "day" to formattedDay,
                 "latitude" to location.latitude,
                 "longitude" to location.longitude,
-                "checkInTime" to "Background Update", // Placeholder
-                "workingHours" to "Background Update", // Placeholder
-                "attendance" to "Background Update", // Placeholder
+                "checkInTime" to "Background Update",
+                "workingHours" to "Background Update",
+                "attendance" to "Background Update",
                 "status" to status
             )
         )
@@ -162,6 +215,10 @@ class LocationTrackingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+        try {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
+        } catch (e: Exception) {
+            // Ignore if updates were never requested
+        }
     }
 }

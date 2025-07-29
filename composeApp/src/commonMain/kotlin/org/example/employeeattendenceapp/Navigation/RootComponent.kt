@@ -1,6 +1,5 @@
 package org.example.employeeattendenceapp.Navigation
 
-// shared/src/commonMain/kotlin/RootComponent.kt
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.decompose.router.stack.ChildStack
 import com.arkivanov.decompose.router.stack.StackNavigation
@@ -23,9 +22,17 @@ class RootComponent(
     val stack: Value<ChildStack<*, Child>> = childStack(
         source = navigation,
         serializer = Config.serializer(),
-        initialConfiguration = if (isUserLoggedIn()) Config.HomeWithFlag(false, initialRole) else Config.Dashboard,
+        initialConfiguration = getInitialConfig(initialRole),
         childFactory = ::createChild
     )
+
+    private fun getInitialConfig(role: String): Config {
+        return when {
+            role == "login" -> Config.Dashboard
+            isUserLoggedIn() -> Config.HomeWithFlag(false, role)
+            else -> Config.Dashboard
+        }
+    }
 
     private fun createChild(config: Config, context: ComponentContext): Child =
         when (config) {

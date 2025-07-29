@@ -1,5 +1,6 @@
 package org.example.employeeattendenceapp
 
+import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,6 +12,8 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
+import android.os.Looper
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -35,9 +38,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
@@ -59,9 +65,57 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Start service when composable launches
+    // Request foreground location first, then background if needed
+    val foregroundLocationPermission = rememberPermissionState(
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
+    val foregroundServicePermission = rememberPermissionState(
+        Manifest.permission.FOREGROUND_SERVICE_LOCATION
+    )
+
+    // State to control permission UI
+    var showPermissionRationale by remember { mutableStateOf(false) }
+
+    // Check permissions when composable launches
     LaunchedEffect(Unit) {
-        LocationTrackingService.startService(context)
+        if (!foregroundLocationPermission.status.isGranted) {
+            showPermissionRationale = true
+        }
+    }
+
+    // Handle permission results
+    LaunchedEffect(foregroundLocationPermission.status) {
+        when {
+            foregroundLocationPermission.status.isGranted -> {
+                // Got foreground location, now check foreground service permission
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    !foregroundServicePermission.status.isGranted) {
+                    foregroundServicePermission.launchPermissionRequest()
+                } else {
+                    // All required permissions granted
+                    LocationTrackingService.startService(context)
+                    showPermissionRationale = false
+                }
+            }
+            foregroundLocationPermission.status is PermissionStatus.Denied -> {
+                showPermissionRationale = true
+            }
+        }
+    }
+
+    // Show permission rationale UI if needed
+    if (showPermissionRationale) {
+        PermissionRationaleDialog(
+            onRequestPermission = {
+                // Request foreground location first
+                foregroundLocationPermission.launchPermissionRequest()
+            },
+            onDismiss = {
+                // Optional: handle user dismissing without granting
+                showPermissionRationale = false
+            }
+        )
+        return
     }
 
     // Use business logic state from commonMain
@@ -79,28 +133,17 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     var longitude by remember { mutableStateOf<Double?>(null) }
     var locationError by remember { mutableStateOf<String?>(null) }
 
-    val locationPermissionState = rememberPermissionState(
-        android.Manifest.permission.ACCESS_FINE_LOCATION
-    )
-
-    // Request permission if not granted
-    LaunchedEffect(Unit) {
-        if (!locationPermissionState.status.isGranted) {
-            locationPermissionState.launchPermissionRequest()
-        }
+    // Only fetch location if permission is granted
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val locationRequest = remember {
+        LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000).apply {
+            setMinUpdateIntervalMillis(500)
+        }.build()
     }
 
-    // Only fetch location if permission is granted
-    if (locationPermissionState.status.isGranted) {
-        val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-        val locationRequest = remember {
-            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000).apply {
-                setMinUpdateIntervalMillis(500)
-            }.build()
-        }
-
-        // Show last known location immediately if available
-        LaunchedEffect(Unit) {
+    // Show last known location immediately if available
+    LaunchedEffect(Unit) {
+        try {
             fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
                 if (location != null) {
                     latitude = location.latitude
@@ -108,42 +151,39 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     locationError = null
                 }
             }.addOnFailureListener {
-                // Don't set error here, wait for real-time update
+                locationError = "Failed to get location"
+            }
+        } catch (e: SecurityException) {
+            locationError = "Location permission not granted"
+        }
+    }
+
+    // Start real-time location updates
+    DisposableEffect(Unit) {
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                val loc = result.lastLocation
+                if (loc != null) {
+                    latitude = loc.latitude
+                    longitude = loc.longitude
+                    locationError = null
+                }
             }
         }
 
-        // Start real-time location updates
-        DisposableEffect(Unit) {
-            val callback = object : LocationCallback() {
-                override fun onLocationResult(result: LocationResult) {
-                    val loc = result.lastLocation
-                    if (loc != null) {
-                        latitude = loc.latitude
-                        longitude = loc.longitude
-                        locationError = null
-                    }
-                }
-            }
-            fusedLocationClient.requestLocationUpdates(locationRequest, callback, null)
-            onDispose {
-                fusedLocationClient.removeLocationUpdates(callback)
-            }
+        try {
+            fusedLocationClient.requestLocationUpdates(locationRequest, callback, Looper.getMainLooper())
+        } catch (e: SecurityException) {
+            locationError = "Location permission not granted"
         }
-    } else {
-        locationError = "Location permission not granted."
+
+        onDispose {
+            fusedLocationClient.removeLocationUpdates(callback)
+        }
     }
 
     // Helper to determine if we have a valid location
     val hasLocation = latitude != null && longitude != null && locationError == null
-
-    // If permission is revoked or location is unavailable, clear values
-    LaunchedEffect(locationPermissionState.status.isGranted) {
-        if (!locationPermissionState.status.isGranted) {
-            latitude = null
-            longitude = null
-            locationError = "Location permission not granted."
-        }
-    }
 
     // State to track if location services are enabled
     var locationServicesEnabled by remember { mutableStateOf(true) }
@@ -227,11 +267,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         if (!locationServicesEnabled) {
             latitude = null
             longitude = null
-            locationError = null
+            locationError = "Location services disabled"
         }
     }
 
-    // Clear location if internet is off (since location services might depend on network)
+    // Clear location if internet is off
     LaunchedEffect(internetConnected) {
         if (!internetConnected) {
             latitude = null
@@ -248,23 +288,23 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 
-    // Add this inside your composable:
+    // Current time tracking
     var now by remember { mutableStateOf(LocalTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
             now = LocalTime.now()
-            delay(1000L) // update every second
+            delay(1000L)
         }
     }
+
+    // Office hours and location
     val officeStartTime = LocalTime.of(9, 0)
     val officeEndTime = LocalTime.of(18, 0)
     val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) && now.isBefore(officeEndTime.plusNanos(1))
-
-    // Office location (from user):
     val officeLat = 29.275748
     val officeLon = 79.545030
 
-    // Helper to calculate distance between two lat/lon points (in meters)
+    // Helper to calculate distance between two lat/lon points
     fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
         val result = FloatArray(1)
         Location.distanceBetween(lat1, lon1, lat2, lon2, result)
@@ -272,19 +312,13 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     }
 
     // State: is user in office zone?
-    val isInOfficeZone = latitude != null && longitude != null &&
-            distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 100
+    val isInOfficeZone = hasLocation && distanceBetween(latitude!!, longitude!!, officeLat, officeLon) <= 100
 
-    // Show loading spinner if user is near the office zone boundary (within 20m but not in 10m zone)
-    val isNearOfficeZone = latitude != null && longitude != null &&
-            distanceBetween(latitude!!, longitude!!, officeLat, officeLon) in 10.0..20.0
-
-    // State for attendance button warning
-    var showZoneWarning by remember { mutableStateOf(false) }
+    // Show loading spinner if user is near the office zone boundary
+    val isNearOfficeZone = hasLocation && distanceBetween(latitude!!, longitude!!, officeLat, officeLon) in 10.0..20.0
 
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     // Track the last day when attendance was marked
     var lastAttendanceDay by remember { mutableStateOf(LocalDate.now()) }
@@ -292,37 +326,31 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     LaunchedEffect(now) {
         val today = LocalDate.now()
         if (today != lastAttendanceDay) {
-            // Reset attendance state for new day
             attendanceState.resetForNewDay()
             lastAttendanceDay = today
         }
     }
 
-    // Update working hours on every tick to ensure transitions are handled
+    // Update working hours
     LaunchedEffect(now, isInOfficeZone) {
         attendanceState.updateWorkingHours(now, isInOfficeZone)
     }
 
-    // Real-time status update based on location, office hours, and internet connectivity
+    // Real-time status update
     LaunchedEffect(isInOfficeZone, isOfficeTime, internetConnected, locationServicesEnabled) {
-        if (!internetConnected) {
-            attendanceState.setStatusDash()
-        } else if (!locationServicesEnabled) {
-            attendanceState.setStatusDash()
-        } else if (attendanceState.isAttendanceMarkedToday()) {
-            attendanceState.setStatusPresent()
-            if (isInOfficeZone) {
-                attendanceState.setStatusActive()
-            } else {
+        when {
+            !internetConnected -> attendanceState.setStatusDash()
+            !locationServicesEnabled -> attendanceState.setStatusDash()
+            attendanceState.isAttendanceMarkedToday() -> {
+                attendanceState.setStatusPresent()
+                if (isInOfficeZone) attendanceState.setStatusActive() else attendanceState.setStatusDash()
+            }
+            !isOfficeTime -> {
+                attendanceState.setStatusAbsent()
                 attendanceState.setStatusDash()
             }
-        } else if (!isOfficeTime) {
-            attendanceState.setStatusAbsent()
-            attendanceState.setStatusDash()
-        } else if (isInOfficeZone) {
-            attendanceState.setStatusActive()
-        } else {
-            attendanceState.setStatusDash()
+            isInOfficeZone -> attendanceState.setStatusActive()
+            else -> attendanceState.setStatusDash()
         }
     }
 
@@ -337,18 +365,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val formattedDay = currentDate.format(dayFormatter)
 
     LaunchedEffect(
-        userName,
-        formattedDate,
-        formattedDay,
-        latitude,
-        longitude,
-        checkInTime,
-        workingHours,
-        attendanceStatus,
-        statusText,
-        isInOfficeZone,
-        locationServicesEnabled,
-        internetConnected
+        userName, formattedDate, formattedDay, latitude, longitude,
+        checkInTime, workingHours, attendanceStatus, statusText,
+        isInOfficeZone, locationServicesEnabled, internetConnected
     ) {
         if (uid.isNotEmpty() && internetConnected) {
             org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
@@ -366,6 +385,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 
+    // UI Components
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -379,10 +399,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     val startTime = System.currentTimeMillis()
                     attendanceState.resetZoneVisibility()
 
-                    // Request a single high-accuracy location update
-                    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 0).apply {
-                        setMaxUpdates(1)  // Fixed: setMaxUpdates instead of setNumUpdates
-                    }.build()
+                    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 0)
+                        .setMaxUpdates(1)
+                        .build()
 
                     val locationCallback = object : LocationCallback() {
                         override fun onLocationResult(result: LocationResult) {
@@ -402,7 +421,12 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         }
                     }
 
-                    fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null)
+                    try {
+                        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null)
+                    } catch (e: SecurityException) {
+                        locationError = "Location permission not granted"
+                        isRefreshing = false
+                    }
                 }
             }
         ) {
@@ -414,393 +438,100 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header Section
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 20.dp, bottom = 24.dp)
-                        .shadow(2.dp, RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Place here so both avatar and text can use it
-                            val userEmail = FirebaseAuth.getInstance().currentUser?.email
-                            val userName = userEmail?.substringBefore("@") ?: "Employee"
-                            val initial = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "E"
-                            val currentDate = LocalDate.now()
-                            val dateFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())
-                            val formattedDate = currentDate.format(dateFormatter)
-
-                            // Avatar
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .background(Color(0xFF4B89DC), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = initial, // Initial from name
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = MaterialTheme.typography.headlineMedium.fontSize
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Welcome, $userName",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = formattedDate,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray
-                                )
-                            }
-                        }
-                        // Logout
-                        IconButton(
-                            onClick = {
-                                // Stop service when logging out
-                                LocationTrackingService.stopService(context)
-
-                                signOut()
-                                clearUserRole(context)
-                                if (context is Activity) {
-                                    val intent = Intent(context, context::class.java)
-                                    context.finish()
-                                    context.startActivity(intent)
-                                }
-                            },
-                            modifier = Modifier
-                                .background(Color(0xFFF6F8FB), CircleShape)
-                                .size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                                contentDescription = "Log Out",
-                                tint = Color(0xFF4B89DC)
-                            )
+                HeaderSection(
+                    adminName = userName,
+                    onLogout = {
+                        LocationTrackingService.stopService(context)
+                        signOut()
+                        clearUserRole(context)
+                        if (context is Activity) {
+                            val intent = Intent(context, context::class.java)
+                            context.finish()
+                            context.startActivity(intent)
                         }
                     }
-                }
+                )
 
                 // Location Card
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp)
-                        .shadow(1.dp, RoundedCornerShape(12.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Current Location",
-                            style = MaterialTheme.typography.titleLarge, // larger font
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 2.dp, top = 2.dp)
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        when {
-                            !internetConnected -> {
-                                Text(
-                                    text = "No internet connection",
-                                    color = Color.Red,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                            !locationServicesEnabled -> {
-                                Text(
-                                    text = "Location services disabled",
-                                    color = Color.Red,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                            locationError != null -> {
-                                Text(
-                                    text = locationError!!,
-                                    color = Color.Red,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                            hasLocation -> {
-                                val color = if (isInOfficeZone) Color.Gray else Color.Red
-                                Text(
-                                    text = "Latitude: ${latitude?.let { String.format("%.6f", it) }}",
-                                    color = color,
-                                    style = MaterialTheme.typography.titleMedium, // larger font
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Longitude: ${longitude?.let { String.format("%.6f", it) }}",
-                                    color = color,
-                                    style = MaterialTheme.typography.titleMedium, // larger font
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                            else -> {
-                                Text(
-                                    text = "Waiting for location...",
-                                    color = Color.Gray,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(18.dp))
-                        Image(
-                            painter = painterResource(id = R.drawable.map),
-                            contentDescription = "Location Map",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .padding(start = 4.dp)
-                                .fillMaxWidth()
-                                .height(200.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                        )
-                    }
-                }
+                LocationCard(
+                    internetConnected = internetConnected,
+                    locationServicesEnabled = locationServicesEnabled,
+                    locationError = locationError,
+                    hasLocation = hasLocation,
+                    latitude = latitude,
+                    longitude = longitude,
+                    isInOfficeZone = isInOfficeZone
+                )
 
                 // Mark Attendance Card
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp)
-                        .shadow(1.dp, RoundedCornerShape(12.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    var isSignedOff by remember { mutableStateOf(false) }
-
-                    Column {
-                        // Mark Attendance Button
-                        Button(
-                            onClick = {
-                                if (!internetConnected) {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("No internet connection. Please check your network.")
-                                    }
-                                } else if (!isOfficeTime) {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Not an office time")
-                                    }
-                                } else if (!isInOfficeZone) {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("You can't mark attendance. You are not in office.")
-                                    }
-                                } else {
-                                    try {
-                                        attendanceState.markAttendance()
+                MarkAttendanceCard(
+                    internetConnected = internetConnected,
+                    isOfficeTime = isOfficeTime,
+                    isInOfficeZone = isInOfficeZone,
+                    isNearOfficeZone = isNearOfficeZone,
+                    isAttendanceMarkedToday = attendanceState.isAttendanceMarkedToday(),
+                    attendanceMarkedTime = attendanceState.attendanceMarkedTime.value,
+                    onMarkAttendance = {
+                        try {
+                            attendanceState.markAttendance()
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Marked at ${attendanceState.attendanceMarkedTime.value}")
+                                delay(3000)
+                                attendanceState.resetZoneVisibility()
+                            }
+                        } catch (e: Exception) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Attendance failed: ${e.localizedMessage}")
+                            }
+                        }
+                    },
+                    onSignOff = {
+                        coroutineScope.launch {
+                            try {
+                                org.example.employeeattendenceapp.Auth.saveDailyRecord(
+                                    uid = uid,
+                                    name = userName,
+                                    date = formattedDate,
+                                    day = formattedDay,
+                                    checkInTime = checkInTime ?: "Not Marked",
+                                    workingHours = workingHours,
+                                    attendance = attendanceStatus,
+                                    status = statusText,
+                                    onSuccess = {
                                         coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Marked at ${attendanceState.attendanceMarkedTime.value}")
-                                            delay(3000)
-                                            attendanceState.resetZoneVisibility()
+                                            attendanceState.resetForNewDay()
+                                            snackbarHostState.showSnackbar("Signed off. Data saved successfully!")
                                         }
-                                    } catch (e: Exception) {
+                                    },
+                                    onError = { error ->
                                         coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Attendance failed: ${e.localizedMessage}")
+                                            snackbarHostState.showSnackbar("Error saving data: $error")
                                         }
                                     }
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .alpha(if (isOfficeTime && !isSignedOff) 1f else 0.5f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isInOfficeZone && internetConnected) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
-                            ),
-                            enabled = !isSignedOff &&
-                                    markAttendanceEnabled &&
-                                    isOfficeTime &&
-                                    !attendanceState.isAttendanceMarkedToday() &&
-                                    internetConnected
-                            ,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            if (isNearOfficeZone) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            Text(
-                                text = if (attendanceState.isAttendanceMarkedToday()) "Attendance Marked" else "Mark Attendance",
-                                color = Color.White
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Signing Off Button
-                        // In the HomeScreenEmployee composable, update the Signing Off Button section:
-                        Button(
-                            onClick = {
+                            } catch (e: Exception) {
                                 coroutineScope.launch {
-                                    try {
-                                        // Save data to Firebase
-                                        org.example.employeeattendenceapp.Auth.saveDailyRecord(
-                                            uid = uid,
-                                            name = userName,
-                                            date = formattedDate,
-                                            day = formattedDay,
-                                            checkInTime = checkInTime ?: "Not Marked",
-                                            workingHours = workingHours,
-                                            attendance = attendanceStatus,
-                                            status = statusText,
-                                            onSuccess = {
-                                                coroutineScope.launch {
-                                                    attendanceState.resetForNewDay()
-                                                    snackbarHostState.showSnackbar("Signed off. Data saved successfully!")
-                                                }
-                                            },
-                                            onError = { error ->
-                                                coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar("Error saving data: $error")
-                                                }
-                                            }
-                                        )
-                                    } catch (e: Exception) {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Error: ${e.localizedMessage}")
-                                        }
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFd32f2f)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Signing Off", color = Color.White)
-                        }
-
-                        // Zone Visibility Banner
-                        AnimatedVisibility(
-                            visible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected,
-                            enter = fadeIn(),
-                            exit = fadeOut()
-                        ) {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 12.dp)
-                                    .height(64.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE2F6D6))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.check_circle),
-                                        contentDescription = "Within Zone",
-                                        tint = Color(0xFF38761D),
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = "You are within allowed location zone",
-                                        color = Color(0xFF38761D),
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
+                                    snackbarHostState.showSnackbar("Error: ${e.localizedMessage}")
                                 }
                             }
                         }
-                    }
-
-                }
+                    },
+                    withinZoneVisible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected
+                )
 
                 // Today's Stats Card
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp)
-                        .shadow(1.dp, RoundedCornerShape(12.dp))
-                        .height(240.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp),
-                        verticalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        Text(
-                            text = "Today's Stats",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.Start) // Align to top left
-                        )
-                        Spacer(modifier = Modifier.height(28.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Check-in time", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = checkInTime ?: "Not marked",
-                                fontWeight = FontWeight.Medium,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (checkInTime != null) Color(0xFF4B89DC) else Color.Gray
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Working hours", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = workingHours,
-                                fontWeight = FontWeight.Medium,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (workingHours != "0h 0m 0s") Color(0xFF4B89DC) else Color.Gray
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Attendance", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = attendanceStatus,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (attendanceStatus == "Present") Color(0xFF4B89DC) else Color.Red
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Status", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
-                            Text(text = statusText, color = Color(0xFF4B89DC), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        }
-                    }
-                }
+                TodaysStatsCard(
+                    checkInTime = checkInTime,
+                    workingHours = workingHours,
+                    attendanceStatus = attendanceStatus,
+                    statusText = statusText
+                )
 
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
-        // Snackbar host at the bottom of the screen
+
+        // Snackbar host
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
@@ -808,4 +539,342 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             SnackbarHost(hostState = snackbarHostState)
         }
     }
+}
+
+@Composable
+private fun HeaderSection(
+    adminName: String,
+    onLogout: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 20.dp, bottom = 24.dp)
+            .shadow(2.dp, RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val initial = adminName.firstOrNull()?.uppercaseChar()?.toString() ?: "E"
+                val currentDate = LocalDate.now()
+                val dateFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())
+                val formattedDate = currentDate.format(dateFormatter)
+
+                // Avatar
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(Color(0xFF4B89DC), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = initial,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = MaterialTheme.typography.headlineMedium.fontSize
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Welcome, $adminName",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = formattedDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+            // Logout
+            IconButton(
+                onClick = onLogout,
+                modifier = Modifier
+                    .background(Color(0xFFF6F8FB), CircleShape)
+                    .size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = "Log Out",
+                    tint = Color(0xFF4B89DC)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationCard(
+    internetConnected: Boolean,
+    locationServicesEnabled: Boolean,
+    locationError: String?,
+    hasLocation: Boolean,
+    latitude: Double?,
+    longitude: Double?,
+    isInOfficeZone: Boolean
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp)
+            .shadow(1.dp, RoundedCornerShape(12.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Current Location",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 2.dp, top = 2.dp)
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            when {
+                !internetConnected -> LocationStatusText("No internet connection", Color.Red)
+                !locationServicesEnabled -> LocationStatusText("Location services disabled", Color.Red)
+                locationError != null -> LocationStatusText(locationError!!, Color.Red)
+                hasLocation -> {
+                    val color = if (isInOfficeZone) Color.Gray else Color.Red
+                    Column {
+                        LocationStatusText("Latitude: ${latitude?.let { String.format("%.6f", it) }}", color)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LocationStatusText("Longitude: ${longitude?.let { String.format("%.6f", it) }}", color)
+                    }
+                }
+                else -> LocationStatusText("Waiting for location...", Color.Gray)
+            }
+            Spacer(modifier = Modifier.height(18.dp))
+            Image(
+                painter = painterResource(id = R.drawable.map),
+                contentDescription = "Location Map",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(16.dp))
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocationStatusText(text: String, color: Color) {
+    Text(
+        text = text,
+        color = color,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(start = 4.dp)
+    )
+}
+
+@Composable
+private fun MarkAttendanceCard(
+    internetConnected: Boolean,
+    isOfficeTime: Boolean,
+    isInOfficeZone: Boolean,
+    isNearOfficeZone: Boolean,
+    isAttendanceMarkedToday: Boolean,
+    attendanceMarkedTime: String?,
+    onMarkAttendance: () -> Unit,
+    onSignOff: () -> Unit,
+    withinZoneVisible: Boolean
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp)
+            .shadow(1.dp, RoundedCornerShape(12.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        var isSignedOff by remember { mutableStateOf(false) }
+
+        Column {
+            // Mark Attendance Button
+            Button(
+                onClick = {
+                    if (!internetConnected) {
+                        // Show snackbar handled in parent
+                    } else if (!isOfficeTime) {
+                        // Show snackbar handled in parent
+                    } else if (!isInOfficeZone) {
+                        // Show snackbar handled in parent
+                    } else {
+                        onMarkAttendance()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (isOfficeTime && !isSignedOff) 1f else 0.5f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isInOfficeZone && internetConnected) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
+                ),
+                enabled = !isSignedOff &&
+                        isOfficeTime &&
+                        !isAttendanceMarkedToday &&
+                        internetConnected,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (isNearOfficeZone) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = if (isAttendanceMarkedToday) "Attendance Marked" else "Mark Attendance",
+                    color = Color.White
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Signing Off Button
+            Button(
+                onClick = onSignOff,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFd32f2f)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Signing Off", color = Color.White)
+            }
+
+            // Zone Visibility Banner
+            AnimatedVisibility(
+                visible = withinZoneVisible,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .height(64.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE2F6D6))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.check_circle),
+                            contentDescription = "Within Zone",
+                            tint = Color(0xFF38761D),
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "You are within allowed location zone",
+                            color = Color(0xFF38761D),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodaysStatsCard(
+    checkInTime: String?,
+    workingHours: String,
+    attendanceStatus: String,
+    statusText: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp)
+            .shadow(1.dp, RoundedCornerShape(12.dp))
+            .height(240.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Text(
+                text = "Today's Stats",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(modifier = Modifier.height(28.dp))
+            StatRow("Check-in time", checkInTime ?: "Not marked", checkInTime != null)
+            Spacer(modifier = Modifier.height(6.dp))
+            StatRow("Working hours", workingHours, workingHours != "0h 0m 0s")
+            Spacer(modifier = Modifier.height(6.dp))
+            StatRow("Attendance", attendanceStatus, attendanceStatus == "Present", isAttendance = true)
+            Spacer(modifier = Modifier.height(6.dp))
+            StatRow("Status", statusText, true)
+        }
+    }
+}
+
+@Composable
+private fun StatRow(
+    label: String,
+    value: String,
+    isActive: Boolean,
+    isAttendance: Boolean = false
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            color = Color.Gray,
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = value,
+            fontWeight = if (isAttendance) FontWeight.Bold else FontWeight.Medium,
+            style = MaterialTheme.typography.titleMedium,
+            color = when {
+                isAttendance && value == "Present" -> Color(0xFF4B89DC)
+                isAttendance && value == "Absent" -> Color.Red
+                isActive -> Color(0xFF4B89DC)
+                else -> Color.Gray
+            }
+        )
+    }
+}
+
+@Composable
+private fun PermissionRationaleDialog(
+    onRequestPermission: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Location Permission Required") },
+        text = { Text("Location permissions are required for attendance tracking") },
+        confirmButton = {
+            Button(onClick = {
+                onRequestPermission()
+            }) {
+                Text("Grant Permission")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

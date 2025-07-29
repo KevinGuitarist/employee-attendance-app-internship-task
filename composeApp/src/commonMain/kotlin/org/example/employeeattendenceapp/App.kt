@@ -12,10 +12,10 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 @Preview
 fun App() {
-
     val context = LocalContext.current
     val root = remember {
-        val initialRole = getUserRole(context) ?: "employee"
+        val storedRole = getUserRole(context)
+        val initialRole = storedRole ?: "login"
         RootComponent(
             componentContext = DefaultComponentContext(
                 lifecycle = LifecycleRegistry()
