@@ -3,6 +3,17 @@ package org.example.employeeattendenceapp
 import android.app.Activity
 import android.content.Intent
 import android.util.Log
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.with
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -291,6 +302,21 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                 }
             }
 
+            // Statistics Bar
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    AttendanceStatisticsBar(
+                        presentCount = presentCount,
+                        absentCount = absentCount,
+                        totalEmployees = totalEmployees,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+            }
+
             // Recent Attendance
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -302,7 +328,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 recentAttendance.forEach { (name, time, status) ->
-                    val initials = name.split(" ").map { it.first().uppercase() }.joinToString("").take(2)
+                    val initials = name.split(" ").joinToString("") { it.first().uppercase() }.take(2)
                     Card(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -325,6 +351,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
+
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(name, fontWeight = FontWeight.SemiBold)
                                 Text(time, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
@@ -369,6 +396,110 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
             ) {
                 Text("Monthly Report", color = Color.Black)
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun AttendanceStatisticsBar(
+    presentCount: Int,
+    absentCount: Int,
+    totalEmployees: Int,
+    modifier: Modifier = Modifier
+) {
+    // Animation for weights
+    val total = maxOf(totalEmployees, 1)
+    val presentWeight by animateFloatAsState(
+        targetValue = maxOf(presentCount.toFloat() / total, 0.1f),
+        animationSpec = tween(durationMillis = 500)
+    )
+    val absentWeight by animateFloatAsState(
+        targetValue = maxOf(absentCount.toFloat() / total, 0.1f),
+        animationSpec = tween(durationMillis = 500)
+    )
+    val remainingWeight by animateFloatAsState(
+        targetValue = maxOf(1f - presentWeight - absentWeight, 0.1f),
+        animationSpec = tween(durationMillis = 500)
+    )
+
+    // Animation for number changes
+    val animatedPresentCount by animateIntAsState(
+        targetValue = presentCount,
+        animationSpec = tween(durationMillis = 500)
+    )
+    val animatedAbsentCount by animateIntAsState(
+        targetValue = absentCount,
+        animationSpec = tween(durationMillis = 500)
+    )
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Animated labels row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            AnimatedContent(
+                targetState = animatedPresentCount,
+                transitionSpec = {
+                    slideInVertically { height -> height } + fadeIn() with
+                            slideOutVertically { height -> -height } + fadeOut()
+                }
+            ) { count ->
+                Text(
+                    text = "$count Present",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4CAF50)
+                )
+            }
+
+            AnimatedContent(
+                targetState = animatedAbsentCount,
+                transitionSpec = {
+                    slideInVertically { height -> height } + fadeIn() with
+                            slideOutVertically { height -> -height } + fadeOut()
+                }
+            ) { count ->
+                Text(
+                    text = "$count Absent",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF44336)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Animated progress bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(24.dp)
+                .clip(RoundedCornerShape(12.dp))
+        ) {
+            // Present segment with animation
+            Box(
+                modifier = Modifier
+                    .weight(presentWeight)
+                    .fillMaxHeight()
+                    .background(Color(0xFF4CAF50))
+            )
+
+            // Absent segment with animation
+            Box(
+                modifier = Modifier
+                    .weight(absentWeight)
+                    .fillMaxHeight()
+                    .background(Color(0xFFF44336))
+            )
+
+            // Remaining segment with animation
+            Box(
+                modifier = Modifier
+                    .weight(remainingWeight)
+                    .fillMaxHeight()
+                    .background(Color(0xFF9E9E9E))
+            )
         }
     }
 }
