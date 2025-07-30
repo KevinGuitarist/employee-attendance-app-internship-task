@@ -71,10 +71,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
     // Fetch attendance data from Firebase
     LaunchedEffect(Unit) {
         val usersRef = database.child("users")
-        val dailyRecordsRef = database.child("daily_records").child(todayDate)
         val attendanceRef = database.child("attendance").child(todayDate)
-
-
 
         // Get total employees count (only those with role "employee")
         usersRef.addValueEventListener(object : ValueEventListener {
@@ -130,16 +127,14 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             // Get user details for recent attendance
                             database.child("users").child(userId).get().addOnSuccessListener { userSnapshot ->
                                 if (userSnapshot.exists()) {
-                                    val firstName = userSnapshot.child("firstName").getValue(String::class.java) ?: ""
-                                    val lastName = userSnapshot.child("lastName").getValue(String::class.java) ?: ""
                                     val email = userSnapshot.child("email").getValue(String::class.java) ?: ""
 
-                                    val displayName = when {
-                                        firstName.isNotBlank() -> if (lastName.isNotBlank()) "$firstName $lastName" else firstName
-                                        email.isNotBlank() -> email.substringBefore("@")
+                                    val displayName = if (email.isNotBlank()) {
+                                        email.substringBefore("@")
                                             .replace(".", " ") // Convert dots to spaces
                                             .replaceFirstChar { it.uppercase() } // Capitalize first letter
-                                        else -> "Employee" // Simple fallback
+                                    } else {
+                                        "Employee" // Simple fallback
                                     }
 
                                     tempRecentAttendance.add(Triple(
