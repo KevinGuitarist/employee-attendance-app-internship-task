@@ -60,6 +60,9 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
     var totalEmployees by remember { mutableStateOf(0) }
     val todayDate = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
 
+    var recentAttendanceList by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
+
+
     // Extract name from authenticated user's email
     val adminName = remember(currentUser) {
         currentUser?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: "Admin"
@@ -69,13 +72,17 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
     LaunchedEffect(Unit) {
         val usersRef = database.child("users")
         val dailyRecordsRef = database.child("daily_records").child(todayDate)
+        val attendanceRef = database.child("attendance").child(todayDate)
+
+
 
         // Get total employees count (only those with role "employee")
-        // Replace the usersRef.addValueEventListener block with this:
         usersRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
                     var count = 0
+                    val tempRecentAttendance = mutableListOf<Triple<String, String, String>>()
+
                     if (snapshot.exists()) {
                         snapshot.children.forEach { child ->
                             val role = child.child("role").getValue(String::class.java)
@@ -101,29 +108,56 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
             }
         })
 
-        // Get today's attendance from daily_records
-
-        val attendanceRef = database.child("attendance").child(todayDate)
-
+        // Get today's attendance and recent records
         attendanceRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
                     val presentEmployees = mutableSetOf<String>()
                     val absentEmployees = mutableSetOf<String>()
+                    val tempRecentAttendance = mutableListOf<Triple<String, String, String>>()
 
                     if (snapshot.exists()) {
                         snapshot.children.forEach { employeeSnapshot ->
+                            val userId = employeeSnapshot.key ?: ""
                             val attendance = employeeSnapshot.child("attendance").getValue(String::class.java)
+                            val timestamp = employeeSnapshot.child("timestamp").getValue(String::class.java) ?: ""
+
                             when (attendance) {
-                                "Present" -> presentEmployees.add(employeeSnapshot.key ?: "")
-                                "Absent" -> absentEmployees.add(employeeSnapshot.key ?: "")
+                                "Present" -> presentEmployees.add(userId)
+                                "Absent" -> absentEmployees.add(userId)
+                            }
+
+                            // Get user details for recent attendance
+                            database.child("users").child(userId).get().addOnSuccessListener { userSnapshot ->
+                                if (userSnapshot.exists()) {
+                                    val firstName = userSnapshot.child("firstName").getValue(String::class.java) ?: ""
+                                    val lastName = userSnapshot.child("lastName").getValue(String::class.java) ?: ""
+                                    val email = userSnapshot.child("email").getValue(String::class.java) ?: ""
+
+                                    val displayName = when {
+                                        firstName.isNotBlank() -> if (lastName.isNotBlank()) "$firstName $lastName" else firstName
+                                        email.isNotBlank() -> email.substringBefore("@")
+                                            .replace(".", " ") // Convert dots to spaces
+                                            .replaceFirstChar { it.uppercase() } // Capitalize first letter
+                                        else -> "Employee" // Simple fallback
+                                    }
+
+                                    tempRecentAttendance.add(Triple(
+                                        displayName,
+                                        if (attendance == "Present") timestamp else "Not checked in",
+                                        attendance ?: "Absent"
+                                    ))
+
+                                    recentAttendanceList = tempRecentAttendance.takeLast(4)
+                                }
                             }
                         }
                     }
 
                     presentCount = presentEmployees.size
                     absentCount = absentEmployees.size
-                    notMarkedCount = absentCount // Changed this line
+                    // This is the key change - making notMarkedCount equal to absentCount
+                    notMarkedCount = absentCount
                 } catch (e: Exception) {
                     Log.e("Attendance", "Error processing attendance", e)
                     coroutineScope.launch {
@@ -147,13 +181,6 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
             snackbarHostState.showSnackbar("Logged in successfully!")
         }
     }
-
-    val recentAttendance = listOf(
-        Triple("John Davis", "Checked in at 8:45 AM", "Present"),
-        Triple("Sarah Miller", "Checked in at 9:02 AM", "Absent"),
-        Triple("Robert Johnson", "Checked in at 8:30 AM", "Present"),
-        Triple("Amanda Wilson", "Not checked in", "Absent")
-    )
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -327,47 +354,62 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                recentAttendance.forEach { (name, time, status) ->
-                    val initials = name.split(" ").joinToString("") { it.first().uppercase() }.take(2)
-                    Card(
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                if (recentAttendanceList.isEmpty()) {
+                    // Show nothing or a placeholder if no attendance records exist
+                    Text(
+                        "No attendance records yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    recentAttendanceList.forEach { (name, time, status) ->
+                        val initials = name.take(2).uppercase() // Simple initials from first 2 chars
+
+                        Card(
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF4B89DC)),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF4B89DC)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = initials,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(name, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        if (status == "Absent") "Not checked in" else time,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray
+                                    )
+                                }
                                 Text(
-                                    text = initials,
-                                    color = Color.White,
+                                    text = status,
+                                    color = if (status == "Present") Color(0xFF2E7D32) else Color(0xFFC62828),
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(name, fontWeight = FontWeight.SemiBold)
-                                Text(time, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            }
-                            Text(
-                                text = status,
-                                color = if (status == "Present") Color(0xFF2E7D32) else Color(0xFFC62828),
-                                fontWeight = FontWeight.Bold
-                            )
                         }
                     }
                 }
             }
 
             // Quick Actions
-            Text("Quick Actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Quick Actions", modifier = Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
