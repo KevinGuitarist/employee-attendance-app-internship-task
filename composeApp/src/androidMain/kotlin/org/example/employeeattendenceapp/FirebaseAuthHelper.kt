@@ -94,6 +94,7 @@ actual fun clearUserRole(context: Any) {
     getPrefs(ctx).edit().remove(KEY_USER_ROLE).apply()
 }
 
+// In FirebaseAuthHelper.kt, update the updateEmployeeAttendance function:
 fun updateEmployeeAttendance(
     uid: String,
     name: String,
@@ -106,7 +107,12 @@ fun updateEmployeeAttendance(
     attendance: String,
     status: String
 ) {
-    val dbRef = FirebaseDatabase.getInstance().getReference("attendance").child(uid)
+    // Only write to date-based path
+    val dbRef = FirebaseDatabase.getInstance()
+        .getReference("attendance")
+        .child(date)
+        .child(uid)
+
     val attendanceData = mapOf(
         "name" to name,
         "date" to date,

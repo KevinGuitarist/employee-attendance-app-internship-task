@@ -193,11 +193,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     // Use business logic state from commonMain
     val attendanceState = remember { EmployeeAttendanceState() }
     val statusText by attendanceState.statusText.collectAsState(initial = "Active")
-    val markAttendanceEnabled by attendanceState.markAttendanceEnabled.collectAsState(initial = true)
     val withinZoneVisible by attendanceState.withinZoneVisible.collectAsState(initial = true)
     val checkInTime by attendanceState.checkInTime.collectAsState(initial = null)
     val attendanceStatus by attendanceState.attendanceStatus.collectAsState(initial = "Absent")
-    val attendanceMarkedTime by attendanceState.attendanceMarkedTime.collectAsState(initial = null)
     val workingHours by attendanceState.workingHours.collectAsState(initial = "0h 0m 0s")
 
     // Location state
