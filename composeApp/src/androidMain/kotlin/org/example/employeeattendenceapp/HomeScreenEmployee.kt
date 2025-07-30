@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import android.provider.Settings
+import android.util.Log
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
@@ -48,10 +49,14 @@ import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.example.employeeattendenceapp.Auth.clearUserRole
+import org.example.employeeattendenceapp.Auth.saveDailyRecord
 import org.example.employeeattendenceapp.Auth.signOut
+import org.example.employeeattendenceapp.Auth.updateEmployeeAttendance
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -558,34 +563,60 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     onSignOff = {
                         coroutineScope.launch {
                             try {
-                                org.example.employeeattendenceapp.Auth.saveDailyRecord(
-                                    uid = uid,
-                                    name = userName,
-                                    date = formattedDate,
-                                    day = formattedDay,
-                                    checkInTime = checkInTime ?: "Not Marked",
-                                    workingHours = workingHours,
-                                    attendance = attendanceStatus,
-                                    status = statusText,
-                                    onSuccess = {
-                                        coroutineScope.launch {
-                                            attendanceState.resetForNewDay()
-                                            snackbarHostState.showSnackbar("Signed off. Data saved successfully!")
-                                        }
-                                    },
-                                    onError = { error ->
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Error saving data: $error")
-                                        }
-                                    }
-                                )
-                            } catch (e: Exception) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("Error: ${e.localizedMessage}")
+                                if (uid.isEmpty()) {
+                                    snackbarHostState.showSnackbar("Error: User not authenticated")
+                                    return@launch
                                 }
+
+                                // Save to daily_records first
+                                val saveResult = try {
+                                    org.example.employeeattendenceapp.Auth.saveDailyRecord(
+                                        uid = uid,
+                                        name = userName,
+                                        date = formattedDate,
+                                        day = formattedDay,
+                                        checkInTime = checkInTime ?: "Not Marked",
+                                        workingHours = workingHours,
+                                        attendance = attendanceStatus,
+                                        status = statusText,
+                                        onSuccess = {
+                                            // Don't reset here - we'll do it after both operations complete
+                                        },
+                                        onError = { error ->
+                                            launch {
+                                                snackbarHostState.showSnackbar("Daily record error: $error")
+                                            }
+                                        }
+                                    )
+                                    true
+                                } catch (e: Exception) {
+                                    false
+                                }
+
+                                if (saveResult) {
+                                    // Then update attendance (without callbacks)
+                                    org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
+                                        uid = uid,
+                                        name = userName,
+                                        date = formattedDate,
+                                        day = formattedDay,
+                                        latitude = latitude,
+                                        longitude = longitude,
+                                        checkInTime = "Not Marked", // Reset check-in time
+                                        workingHours = "0h 0m 0s", // Reset working hours
+                                        attendance = "Absent",      // Reset attendance status
+                                        status = "--"              // Reset current status
+                                    )
+
+                                    // Now reset the local state
+                                    attendanceState.resetForNewDay()
+                                    snackbarHostState.showSnackbar("Signed off successfully! Data saved.")
+                                }
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Sign-off failed: ${e.localizedMessage}")
+                                Log.e("SignOff", "Error during sign-off", e)
                             }
-                        }
-                    },
+                        } },
                     withinZoneVisible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected
                 )
 

@@ -4,6 +4,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 
 private const val PREFS_NAME = "user_prefs"
 private const val KEY_USER_ROLE = "user_role"
@@ -94,7 +95,8 @@ actual fun clearUserRole(context: Any) {
     getPrefs(ctx).edit().remove(KEY_USER_ROLE).apply()
 }
 
-// In FirebaseAuthHelper.kt, update the updateEmployeeAttendance function:
+// Update these functions in FirebaseAuthHelper.kt
+
 fun updateEmployeeAttendance(
     uid: String,
     name: String,
@@ -107,13 +109,13 @@ fun updateEmployeeAttendance(
     attendance: String,
     status: String
 ) {
-    // Only write to date-based path
-    val dbRef = FirebaseDatabase.getInstance()
+    // This will ensure no duplicates - overwrites existing data
+    val attendanceRef = FirebaseDatabase.getInstance()
         .getReference("attendance")
         .child(date)
         .child(uid)
 
-    val attendanceData = mapOf(
+    val attendanceData = hashMapOf(
         "name" to name,
         "date" to date,
         "day" to day,
@@ -124,10 +126,13 @@ fun updateEmployeeAttendance(
         "attendance" to attendance,
         "status" to status
     )
-    dbRef.setValue(attendanceData)
+
+    attendanceRef.setValue(attendanceData)
+        .addOnFailureListener { e ->
+            Log.e("Firebase", "Error updating attendance: ${e.message}")
+        }
 }
 
-// Add this function to FirebaseAuthHelper.kt
 fun saveDailyRecord(
     uid: String,
     name: String,
@@ -140,11 +145,12 @@ fun saveDailyRecord(
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
-    val dbRef = FirebaseDatabase.getInstance().getReference("daily_records")
+    val dailyRecordRef = FirebaseDatabase.getInstance()
+        .getReference("daily_records")
         .child(date)
-        .child(uid)  // Changed from child(uid).child(date) to child(date).child(uid)
+        .child(uid)
 
-    val recordData = mapOf(
+    val recordData = hashMapOf(
         "name" to name,
         "date" to date,
         "day" to day,
@@ -153,7 +159,12 @@ fun saveDailyRecord(
         "attendance" to attendance,
         "status" to status
     )
-    dbRef.setValue(recordData)
+
+    // Force write with setValue
+    dailyRecordRef.setValue(recordData)
         .addOnSuccessListener { onSuccess() }
-        .addOnFailureListener { e -> onError(e.localizedMessage ?: "Failed to save daily record") }
+        .addOnFailureListener { e ->
+            onError(e.message ?: "Failed to save daily record")
+            Log.e("Firebase", "Error saving daily record: ${e.message}")
+        }
 }

@@ -2,6 +2,7 @@ package org.example.employeeattendenceapp
 
 import android.app.Activity
 import android.content.Intent
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -59,20 +60,32 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         val dailyRecordsRef = database.child("daily_records").child(todayDate)
 
         // Get total employees count (only those with role "employee")
+        // Replace the usersRef.addValueEventListener block with this:
         usersRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                var count = 0
-                snapshot.children.forEach { child ->
-                    if (child.child("role").getValue(String::class.java) == "employee") {
-                        count++
+                try {
+                    var count = 0
+                    if (snapshot.exists()) {
+                        snapshot.children.forEach { child ->
+                            val role = child.child("role").getValue(String::class.java)
+                            if (role == "employee") {
+                                count++
+                            }
+                        }
+                    }
+                    totalEmployees = count
+                } catch (e: Exception) {
+                    Log.e("EmployeeCount", "Error counting employees", e)
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Error counting employees: ${e.message}")
                     }
                 }
-                totalEmployees = count
             }
 
             override fun onCancelled(error: DatabaseError) {
+                Log.e("EmployeeCount", "Database error: ${error.message}")
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Error loading employee count")
+                    snackbarHostState.showSnackbar("Database error: ${error.message}")
                 }
             }
         })
@@ -80,26 +93,35 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         // Get today's attendance from daily_records
         dailyRecordsRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                var present = 0
-                var absent = 0
-                val markedEmployees = mutableSetOf<String>()
+                try {
+                    val presentEmployees = mutableSetOf<String>()
+                    val absentEmployees = mutableSetOf<String>()
 
-                snapshot.children.forEach { employeeSnapshot ->
-                    when (employeeSnapshot.child("attendance").getValue(String::class.java)) {
-                        "Present" -> present++
-                        "Absent" -> absent++
+                    if (snapshot.exists()) {
+                        snapshot.children.forEach { employeeSnapshot ->
+                            val attendance = employeeSnapshot.child("attendance").getValue(String::class.java)
+                            when (attendance) {
+                                "Present" -> presentEmployees.add(employeeSnapshot.key ?: "")
+                                "Absent" -> absentEmployees.add(employeeSnapshot.key ?: "")
+                            }
+                        }
                     }
-                    markedEmployees.add(employeeSnapshot.key ?: "")
-                }
 
-                presentCount = present
-                absentCount = absent
-                notMarkedCount = totalEmployees - markedEmployees.size
+                    presentCount = presentEmployees.size
+                    absentCount = absentEmployees.size
+                    notMarkedCount = maxOf(0, totalEmployees - presentCount - absentCount)
+                } catch (e: Exception) {
+                    Log.e("DailyRecords", "Error processing records", e)
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Error processing records: ${e.message}")
+                    }
+                }
             }
 
             override fun onCancelled(error: DatabaseError) {
+                Log.e("DailyRecords", "Database error: ${error.message}")
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Error loading attendance data")
+                    snackbarHostState.showSnackbar("Database error: ${error.message}")
                 }
             }
         })
