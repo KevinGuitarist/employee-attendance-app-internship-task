@@ -91,7 +91,10 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         })
 
         // Get today's attendance from daily_records
-        dailyRecordsRef.addValueEventListener(object : ValueEventListener {
+
+        val attendanceRef = database.child("attendance").child(todayDate)
+
+        attendanceRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
                     val presentEmployees = mutableSetOf<String>()
@@ -111,15 +114,15 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     absentCount = absentEmployees.size
                     notMarkedCount = maxOf(0, totalEmployees - presentCount - absentCount)
                 } catch (e: Exception) {
-                    Log.e("DailyRecords", "Error processing records", e)
+                    Log.e("Attendance", "Error processing attendance", e)
                     coroutineScope.launch {
-                        snackbarHostState.showSnackbar("Error processing records: ${e.message}")
+                        snackbarHostState.showSnackbar("Error processing attendance: ${e.message}")
                     }
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                Log.e("DailyRecords", "Database error: ${error.message}")
+                Log.e("Attendance", "Database error: ${error.message}")
                 coroutineScope.launch {
                     snackbarHostState.showSnackbar("Database error: ${error.message}")
                 }
