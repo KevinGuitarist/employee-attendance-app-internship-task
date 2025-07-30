@@ -112,7 +112,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
 
                     presentCount = presentEmployees.size
                     absentCount = absentEmployees.size
-                    notMarkedCount = maxOf(0, totalEmployees - presentCount - absentCount)
+                    notMarkedCount = absentCount // Changed this line
                 } catch (e: Exception) {
                     Log.e("Attendance", "Error processing attendance", e)
                     coroutineScope.launch {
