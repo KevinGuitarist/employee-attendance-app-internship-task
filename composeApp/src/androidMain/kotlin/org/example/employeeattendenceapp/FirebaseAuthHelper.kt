@@ -52,6 +52,7 @@ actual fun signInWithEmailPassword(
     onRoleMismatch: () -> Unit,
     onError: (String) -> Unit
 ) {
+    Log.d("Auth", "signInWithEmailPassword called") // ADDED LOG
     FirebaseAuth.getInstance()
         .signInWithEmailAndPassword(email, password)
         .addOnCompleteListener { task ->
@@ -59,21 +60,29 @@ actual fun signInWithEmailPassword(
                 val uid = FirebaseAuth.getInstance().currentUser?.uid
                 if (uid != null) {
                     val dbRef = FirebaseDatabase.getInstance().getReference("users").child(uid).child("role")
+                    Log.d("Auth", "Database reference: $dbRef") // ADDED LOG
                     dbRef.get().addOnSuccessListener { dataSnapshot ->
                         val storedRole = dataSnapshot.getValue(String::class.java)
+                        Log.d("Auth", "About to print Expected role: $expectedRole, Stored role: $storedRole") // ADD THIS LINE
+                        Log.d("Auth", "Expected role: $expectedRole, Stored role: $storedRole") // ADD THIS LINE
                         if (storedRole == expectedRole) {
                             onSuccess()
                         } else {
                             onRoleMismatch()
                         }
                     }.addOnFailureListener { e ->
+                        Log.e("Auth", "Failed to fetch role: ${e.message}") // ADD THIS LINE
                         onError(e.localizedMessage ?: "Failed to fetch role")
                     }
                 } else {
-                    onError("Failed to get user UID")
+                    val errorMessage = "Failed to get user UID"
+                    Log.e("Auth", errorMessage)  // ADD THIS LINE
+                    onError(errorMessage)
                 }
             } else {
-                onError(task.exception?.localizedMessage ?: "Login failed")
+                val errorMessage = task.exception?.localizedMessage ?: "Login failed"
+                Log.e("Auth", errorMessage)  // ADD THIS LINE
+                onError(errorMessage)
             }
         }
 }
