@@ -20,23 +20,21 @@ actual fun signUpWithEmailPassword(
         .createUserWithEmailAndPassword(email, password)
         .addOnCompleteListener { task ->
             if (task.isSuccessful) {
-                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                // Immediately call onSuccess since auth is complete
+                onSuccess()
+
+                // Continue with database write in background
+                val uid = task.result?.user?.uid
                 if (uid != null) {
                     val dbRef = FirebaseDatabase.getInstance().getReference("users").child(uid)
-                    // Store both email and role in one operation
                     val userData = hashMapOf(
                         "email" to email,
                         "role" to role
                     )
-                    dbRef.setValue(userData)
-                        .addOnSuccessListener { onSuccess() }
-                        .addOnFailureListener { e ->
-                            onError(e.localizedMessage ?: "Failed to save user data")
-                            // Optional: delete the auth user if database save fails
-                            FirebaseAuth.getInstance().currentUser?.delete()
-                        }
-                } else {
-                    onError("Failed to get user UID")
+                    dbRef.setValue(userData).addOnFailureListener { e ->
+                        Log.e("Auth", "Failed to save user data", e)
+                        // Optional: log the error but don't show to user
+                    }
                 }
             } else {
                 onError(task.exception?.localizedMessage ?: "Sign-up failed")

@@ -174,24 +174,26 @@ fun SignUp(component: SignupComponent) {
                             }
                             return@Button
                         }
+
                         isLoading = true
+                        focusManager.clearFocus()
+
                         signUpWithEmailPassword(
                             email = emailValue.text,
                             password = passwordValue.text,
-                            role = component.role, // Pass the role from the component
+                            role = component.role,
                             onSuccess = {
                                 coroutineScope.launch {
-                                    focusManager.clearFocus()
                                     isLoading = false
-                                    snackbarHostState.showSnackbar("Account created successfully, now login.")
+                                    snackbarHostState.showSnackbar("Account created successfully!")
+                                    // Navigation will happen after snackbar via isSuccess
                                     isSuccess = true
                                 }
                             },
                             onError = { message ->
                                 coroutineScope.launch {
-                                    focusManager.clearFocus()
                                     isLoading = false
-                                    snackbarHostState.showSnackbar(message)
+                                    snackbarHostState.showSnackbar("Error: $message")
                                 }
                             }
                         )
