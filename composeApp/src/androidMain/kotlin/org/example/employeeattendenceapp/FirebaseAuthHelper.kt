@@ -5,6 +5,9 @@ import com.google.firebase.database.FirebaseDatabase
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 
 private const val PREFS_NAME = "user_prefs"
 private const val KEY_USER_ROLE = "user_role"
@@ -12,32 +15,45 @@ private const val KEY_USER_ROLE = "user_role"
 actual fun signUpWithEmailPassword(
     email: String,
     password: String,
-    role: String,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
-    FirebaseAuth.getInstance()
-        .createUserWithEmailAndPassword(email, password)
+    // No email format validation - accept any email
+    FirebaseAuth.getInstance().createUserWithEmailAndPassword(email, password)
         .addOnCompleteListener { task ->
             if (task.isSuccessful) {
-                // Immediately call onSuccess since auth is complete
-                onSuccess()
-
-                // Continue with database write in background
-                val uid = task.result?.user?.uid
-                if (uid != null) {
-                    val dbRef = FirebaseDatabase.getInstance().getReference("users").child(uid)
-                    val userData = hashMapOf(
-                        "email" to email,
-                        "role" to role
-                    )
-                    dbRef.setValue(userData).addOnFailureListener { e ->
-                        Log.e("Auth", "Failed to save user data", e)
-                        // Optional: log the error but don't show to user
-                    }
+                val user = task.result?.user
+                val uid = user?.uid ?: run {
+                    onError("Registration failed - no user ID")
+                    return@addOnCompleteListener
                 }
+
+                // Create employee record in Realtime Database
+                val userData = hashMapOf(
+                    "email" to email,
+                    "role" to "employee" // Auto-assign employee role
+                )
+
+                FirebaseDatabase.getInstance().getReference("users/$uid")
+                    .setValue(userData)
+                    .addOnSuccessListener {
+                        Log.d("Auth", "Employee account created successfully")
+                        onSuccess()
+                    }
+                    .addOnFailureListener { e ->
+                        // Rollback auth creation if DB fails
+                        user.delete()
+                        Log.e("Auth", "Failed to create employee record", e)
+                        onError("Failed to complete registration. Please try again.")
+                    }
             } else {
-                onError(task.exception?.localizedMessage ?: "Sign-up failed")
+                val error = task.exception
+                val errorMessage = when {
+                    error is FirebaseAuthUserCollisionException -> "Email already in use"
+                    error?.message?.contains("password") == true -> "Weak password (min 6 chars)"
+                    else -> "Sign-up failed: ${error?.localizedMessage}"
+                }
+                onError(errorMessage)
             }
         }
 }
@@ -50,56 +66,89 @@ actual fun signInWithEmailPassword(
     onRoleMismatch: () -> Unit,
     onError: (String) -> Unit
 ) {
-    Log.d("Auth", "Attempting sign in for: $email")
-
     FirebaseAuth.getInstance().signInWithEmailAndPassword(email, password)
         .addOnCompleteListener { task ->
             if (task.isSuccessful) {
-                Log.d("Auth", "Authentication successful for: $email")
                 val user = task.result?.user
-                val uid = user?.uid
+                val uid = user?.uid ?: run {
+                    onError("Authentication error")
+                    return@addOnCompleteListener
+                }
 
-                if (uid != null) {
-                    // Special case for admin login
-                    if (expectedRole == "admin") {
-                        if (email == "admin1@gmail.com") {
-                            Log.d("Auth", "Admin login approved")
-                            onSuccess()
-                        } else {
-                            Log.d("Auth", "Admin email mismatch")
-                            FirebaseAuth.getInstance().signOut()
-                            onRoleMismatch()
-                        }
-                    } else {
-                        // Regular employee login
-                        FirebaseDatabase.getInstance().getReference("users/$uid/role")
-                            .get()
-                            .addOnSuccessListener { snapshot ->
-                                val storedRole = snapshot.getValue(String::class.java)
-                                Log.d("Auth", "Retrieved role: $storedRole, Expected: $expectedRole")
-
-                                if (storedRole == expectedRole) {
-                                    onSuccess()
-                                } else {
-                                    Log.d("Auth", "Role mismatch")
-                                    FirebaseAuth.getInstance().signOut()
-                                    onRoleMismatch()
+                // Check if user exists in database
+                FirebaseDatabase.getInstance().getReference("users/$uid")
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        if (snapshot.exists()) {
+                            // User exists in database - check role
+                            val storedRole = snapshot.child("role").getValue(String::class.java)
+                            when {
+                                storedRole == "admin" -> {
+                                    if (expectedRole == "admin") {
+                                        onSuccess()
+                                    } else {
+                                        FirebaseAuth.getInstance().signOut()
+                                        onRoleMismatch()
+                                    }
+                                }
+                                storedRole == "employee" -> {
+                                    if (expectedRole == "employee") {
+                                        onSuccess()
+                                    } else {
+                                        FirebaseAuth.getInstance().signOut()
+                                        onRoleMismatch()
+                                    }
+                                }
+                                else -> {
+                                    // Role not properly set - treat as employee
+                                    if (expectedRole == "employee") {
+                                        // Update the role to employee if missing
+                                        snapshot.ref.child("role").setValue("employee")
+                                            .addOnSuccessListener { onSuccess() }
+                                            .addOnFailureListener {
+                                                FirebaseAuth.getInstance().signOut()
+                                                onError("Failed to assign role")
+                                            }
+                                    } else {
+                                        FirebaseAuth.getInstance().signOut()
+                                        onRoleMismatch()
+                                    }
                                 }
                             }
-                            .addOnFailureListener { e ->
-                                Log.e("Auth", "Database error: ${e.message}")
+                        } else {
+                            // User doesn't exist in database - must be manually created admin
+                            if (expectedRole == "admin") {
+                                // Create admin record
+                                val adminData = hashMapOf(
+                                    "email" to email,
+                                    "role" to "admin"
+                                )
+                                FirebaseDatabase.getInstance().getReference("users/$uid")
+                                    .setValue(adminData)
+                                    .addOnSuccessListener { onSuccess() }
+                                    .addOnFailureListener {
+                                        FirebaseAuth.getInstance().signOut()
+                                        onError("Failed to create admin record")
+                                    }
+                            } else {
+                                // Regular employee - shouldn't be able to login without signup
                                 FirebaseAuth.getInstance().signOut()
-                                onError("Failed to verify user role")
+                                onError("Account not found. Please sign up first.")
                             }
+                        }
                     }
-                } else {
-                    Log.e("Auth", "No UID after successful auth")
-                    onError("Authentication error")
-                }
+                    .addOnFailureListener {
+                        FirebaseAuth.getInstance().signOut()
+                        onError("Failed to verify user account")
+                    }
             } else {
                 val error = task.exception
-                Log.e("Auth", "Sign in failed: ${error?.message}")
-                onError(error?.message ?: "Sign in failed")
+                val errorMessage = when {
+                    error is FirebaseAuthInvalidUserException -> "Account not found"
+                    error is FirebaseAuthInvalidCredentialsException -> "Invalid password"
+                    else -> error?.localizedMessage ?: "Login failed"
+                }
+                onError(errorMessage)
             }
         }
 }

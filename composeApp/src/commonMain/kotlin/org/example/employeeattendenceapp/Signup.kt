@@ -181,7 +181,6 @@ fun SignUp(component: SignupComponent) {
                         signUpWithEmailPassword(
                             email = emailValue.text,
                             password = passwordValue.text,
-                            role = component.role,
                             onSuccess = {
                                 coroutineScope.launch {
                                     isLoading = false

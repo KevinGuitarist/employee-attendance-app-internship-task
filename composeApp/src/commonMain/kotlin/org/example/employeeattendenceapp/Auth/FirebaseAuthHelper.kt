@@ -3,7 +3,6 @@ package org.example.employeeattendenceapp.Auth
 expect fun signUpWithEmailPassword(
     email: String,
     password: String,
-    role: String,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 )
