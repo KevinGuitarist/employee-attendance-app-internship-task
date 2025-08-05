@@ -174,7 +174,7 @@ fun LoginScreen(component: LoginComponent) {
                                 coroutineScope.launch {
                                     focusManager.clearFocus()
                                     isLoading = false
-                                    snackbarHostState.showSnackbar("Invalid Email")
+                                    snackbarHostState.showSnackbar("Invalid credentials for ${component.role} login")
                                 }
                             },
                             onError = { message ->

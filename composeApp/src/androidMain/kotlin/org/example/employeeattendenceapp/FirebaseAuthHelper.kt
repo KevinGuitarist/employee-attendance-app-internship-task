@@ -50,37 +50,56 @@ actual fun signInWithEmailPassword(
     onRoleMismatch: () -> Unit,
     onError: (String) -> Unit
 ) {
-    Log.d("Auth", "signInWithEmailPassword called") // ADDED LOG
-    FirebaseAuth.getInstance()
-        .signInWithEmailAndPassword(email, password)
+    Log.d("Auth", "Attempting sign in for: $email")
+
+    FirebaseAuth.getInstance().signInWithEmailAndPassword(email, password)
         .addOnCompleteListener { task ->
             if (task.isSuccessful) {
-                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                Log.d("Auth", "Authentication successful for: $email")
+                val user = task.result?.user
+                val uid = user?.uid
+
                 if (uid != null) {
-                    val dbRef = FirebaseDatabase.getInstance().getReference("users").child(uid).child("role")
-                    Log.d("Auth", "Database reference: $dbRef") // ADDED LOG
-                    dbRef.get().addOnSuccessListener { dataSnapshot ->
-                        val storedRole = dataSnapshot.getValue(String::class.java)
-                        Log.d("Auth", "About to print Expected role: $expectedRole, Stored role: $storedRole") // ADD THIS LINE
-                        Log.d("Auth", "Expected role: $expectedRole, Stored role: $storedRole") // ADD THIS LINE
-                        if (storedRole == expectedRole) {
+                    // Special case for admin login
+                    if (expectedRole == "admin") {
+                        if (email == "admin1@gmail.com") {
+                            Log.d("Auth", "Admin login approved")
                             onSuccess()
                         } else {
+                            Log.d("Auth", "Admin email mismatch")
+                            FirebaseAuth.getInstance().signOut()
                             onRoleMismatch()
                         }
-                    }.addOnFailureListener { e ->
-                        Log.e("Auth", "Failed to fetch role: ${e.message}") // ADD THIS LINE
-                        onError(e.localizedMessage ?: "Failed to fetch role")
+                    } else {
+                        // Regular employee login
+                        FirebaseDatabase.getInstance().getReference("users/$uid/role")
+                            .get()
+                            .addOnSuccessListener { snapshot ->
+                                val storedRole = snapshot.getValue(String::class.java)
+                                Log.d("Auth", "Retrieved role: $storedRole, Expected: $expectedRole")
+
+                                if (storedRole == expectedRole) {
+                                    onSuccess()
+                                } else {
+                                    Log.d("Auth", "Role mismatch")
+                                    FirebaseAuth.getInstance().signOut()
+                                    onRoleMismatch()
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                Log.e("Auth", "Database error: ${e.message}")
+                                FirebaseAuth.getInstance().signOut()
+                                onError("Failed to verify user role")
+                            }
                     }
                 } else {
-                    val errorMessage = "Failed to get user UID"
-                    Log.e("Auth", errorMessage)  // ADD THIS LINE
-                    onError(errorMessage)
+                    Log.e("Auth", "No UID after successful auth")
+                    onError("Authentication error")
                 }
             } else {
-                val errorMessage = task.exception?.localizedMessage ?: "Login failed"
-                Log.e("Auth", errorMessage)  // ADD THIS LINE
-                onError(errorMessage)
+                val error = task.exception
+                Log.e("Auth", "Sign in failed: ${error?.message}")
+                onError(error?.message ?: "Sign in failed")
             }
         }
 }
