@@ -179,7 +179,7 @@ class LocationTrackingService : Service() {
             else -> "--"
         }
 
-        FirebaseDatabase.getInstance().getReference("attendance").child(uid).setValue(
+        FirebaseDatabase.getInstance().getReference("attendance/$formattedDate/$uid").setValue(
             mapOf(
                 "name" to userName,
                 "date" to formattedDate,

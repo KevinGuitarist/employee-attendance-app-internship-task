@@ -49,14 +49,10 @@ import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.example.employeeattendenceapp.Auth.clearUserRole
-import org.example.employeeattendenceapp.Auth.saveDailyRecord
 import org.example.employeeattendenceapp.Auth.signOut
-import org.example.employeeattendenceapp.Auth.updateEmployeeAttendance
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
