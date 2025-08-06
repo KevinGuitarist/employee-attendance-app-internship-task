@@ -7,7 +7,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -110,37 +109,37 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
                     val presentEmployees = mutableSetOf<String>()
-                    val absentEmployees = mutableSetOf<String>()
+                    val absentNotMarkedEmployees = mutableSetOf<String>()
                     val tempRecentAttendance = mutableListOf<Triple<String, String, String>>()
 
                     if (snapshot.exists()) {
                         snapshot.children.forEach { employeeSnapshot ->
                             val userId = employeeSnapshot.key ?: ""
                             val attendance = employeeSnapshot.child("attendance").getValue(String::class.java)
-                            val timestamp = employeeSnapshot.child("timestamp").getValue(String::class.java) ?: ""
+                            val checkInTime = employeeSnapshot.child("checkInTime").getValue(String::class.java) ?: ""
+                            val status = employeeSnapshot.child("status").getValue(String::class.java) ?: ""
 
-                            when (attendance) {
-                                "Present" -> presentEmployees.add(userId)
-                                "Absent" -> absentEmployees.add(userId)
+                            if (attendance == "Present") {
+                                presentEmployees.add(userId)
+                            } else {
+                                absentNotMarkedEmployees.add(userId)
                             }
 
                             // Get user details for recent attendance
                             database.child("users").child(userId).get().addOnSuccessListener { userSnapshot ->
                                 if (userSnapshot.exists()) {
                                     val email = userSnapshot.child("email").getValue(String::class.java) ?: ""
+                                    val displayName = email.substringBefore("@")
+                                        .replace(".", " ")
+                                        .replaceFirstChar { it.uppercase() }
 
-                                    val displayName = if (email.isNotBlank()) {
-                                        email.substringBefore("@")
-                                            .replace(".", " ") // Convert dots to spaces
-                                            .replaceFirstChar { it.uppercase() } // Capitalize first letter
-                                    } else {
-                                        "Employee" // Simple fallback
-                                    }
+                                    val displayStatus = if (attendance == "Present") "Present" else "Absent/Not Marked"
+                                    val displayTime = if (attendance == "Present") checkInTime else "Not checked in"
 
                                     tempRecentAttendance.add(Triple(
                                         displayName,
-                                        if (attendance == "Present") timestamp else "Not checked in",
-                                        attendance ?: "Absent"
+                                        displayTime,
+                                        displayStatus
                                     ))
 
                                     recentAttendanceList = tempRecentAttendance.takeLast(4)
@@ -150,9 +149,8 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     }
 
                     presentCount = presentEmployees.size
-                    absentCount = absentEmployees.size
-                    // This is the key change - making notMarkedCount equal to absentCount
-                    notMarkedCount = absentCount
+                    absentCount = absentNotMarkedEmployees.size
+                    notMarkedCount = absentNotMarkedEmployees.size // Make equal to absentCount
                 } catch (e: Exception) {
                     Log.e("Attendance", "Error processing attendance", e)
                     coroutineScope.launch {
