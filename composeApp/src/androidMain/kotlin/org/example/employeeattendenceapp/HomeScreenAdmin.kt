@@ -14,7 +14,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.with
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -34,6 +36,7 @@ import org.example.employeeattendenceapp.Auth.clearUserRole
 import org.example.employeeattendenceapp.Auth.signOut
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Send
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -41,8 +44,11 @@ import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
+import org.example.employeeattendenceapp.data.model.Task
+import org.example.employeeattendenceapp.viewmodels.TaskAdminViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
 actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
@@ -51,6 +57,9 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
     val currentUser = FirebaseAuth.getInstance().currentUser
     val database = Firebase.database.reference
     val coroutineScope = rememberCoroutineScope()
+
+    val taskViewModel: TaskAdminViewModel = hiltViewModel()
+    var showTaskDialog by remember { mutableStateOf(false) }
 
     // State variables
     var presentCount by remember { mutableStateOf(0) }
@@ -66,6 +75,8 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
     val adminName = remember(currentUser) {
         currentUser?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: "Admin"
     }
+
+    var selectedEmployee by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     // Fetch attendance data from Firebase
     LaunchedEffect(Unit) {
@@ -362,6 +373,10 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                         Card(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
+                                .clickable {
+                                selectedEmployee = Pair(name, name) // Assuming name is the ID
+                                showTaskDialog = true
+                            }
                         ) {
                             Row(
                                 modifier = Modifier.padding(16.dp),
@@ -397,6 +412,17 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                                 )
                             }
                         }
+                    }
+                    if (showTaskDialog && selectedEmployee != null) {
+                        EmployeeTaskDialog(
+                            employeeId = selectedEmployee!!.first,
+                            employeeName = selectedEmployee!!.second,
+                            viewModel = taskViewModel,
+                            onDismiss = {
+                                showTaskDialog = false
+                                selectedEmployee = null
+                            }
+                        )
                     }
                 }
             }
@@ -535,6 +561,127 @@ fun AttendanceStatisticsBar(
                     .fillMaxHeight()
                     .background(Color(0xFF9E9E9E))
             )
+        }
+    }
+}
+
+@Composable
+fun EmployeeTaskDialog(
+    employeeId: String,
+    employeeName: String,
+    viewModel: TaskAdminViewModel,
+    onDismiss: () -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    var taskTitle by remember { mutableStateOf("") }
+    var taskDescription by remember { mutableStateOf("") }
+    var taskDueDate by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assign Task to $employeeName") },
+        text = {
+            Column {
+                // Task Assignment Form
+                OutlinedTextField(
+                    value = taskTitle,
+                    onValueChange = { taskTitle = it },
+                    label = { Text("Task Title") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = taskDescription,
+                    onValueChange = { taskDescription = it },
+                    label = { Text("Description") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                )
+
+                OutlinedTextField(
+                    value = taskDueDate,
+                    onValueChange = { taskDueDate = it },
+                    label = { Text("Due Date (YYYY-MM-DD)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Existing Tasks List
+                if (uiState.employeeTasks.isNotEmpty()) {
+                    Text("Existing Tasks:", style = MaterialTheme.typography.titleMedium)
+                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                        items(uiState.employeeTasks.size) { index ->
+                            val task = uiState.employeeTasks[index]
+                            TaskItem(task = task)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    viewModel.assignTask(
+                        adminId = FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                        adminName = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@") ?: "Admin",
+                        employeeId = employeeId,
+                        employeeName = employeeName,
+                        title = taskTitle,
+                        description = taskDescription,
+                        dueDate = taskDueDate,
+                        onComplete = { result ->
+                            if (result.isSuccess) {
+                                taskTitle = ""
+                                taskDescription = ""
+                                taskDueDate = ""
+                            }
+                        }
+                    )
+                },
+                enabled = taskTitle.isNotEmpty() && taskDueDate.isNotEmpty()
+            ) {
+                Icon(Icons.Default.Send, contentDescription = "Assign")
+                Spacer(Modifier.width(8.dp))
+                Text("Assign Task")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun TaskItem(task: Task) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(task.title, style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(task.description)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Due: ${task.dueDate}")
+                Text(
+                    "Status: ${task.status}", color = when (task.status) {
+                        "Completed" -> Color(0xFF388E3C)
+                        "In Progress" -> Color(0xFFF57C00)
+                        else -> Color(0xFFD32F2F)
+                    }
+                )
+            }
+            if (task.employeeResponse.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Response: ${task.employeeResponse}")
+            }
         }
     }
 }

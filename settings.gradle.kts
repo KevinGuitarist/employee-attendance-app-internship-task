@@ -9,6 +9,8 @@ pluginManagement {
                 includeGroupAndSubgroups("com.android")
                 includeGroupAndSubgroups("com.google")
             }
+            url = uri("https://maven.google.com")  // Explicit Google Maven URL
+
         }
         mavenCentral()
         gradlePluginPortal()

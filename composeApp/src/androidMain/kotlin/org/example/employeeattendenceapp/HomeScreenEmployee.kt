@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import android.provider.Settings
 import android.util.Log
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.isGranted
@@ -53,6 +54,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.example.employeeattendenceapp.Auth.clearUserRole
 import org.example.employeeattendenceapp.Auth.signOut
+import org.example.employeeattendenceapp.ui.employee.TaskEmployeeViewModel
+import org.example.employeeattendenceapp.ui.employee.components.EmployeeTaskView
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -71,6 +74,13 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     )
     // State to control permission UI
     var showLocationSettingsDialog by remember { mutableStateOf(false) }
+
+    val taskViewModel: TaskEmployeeViewModel = hiltViewModel()
+    val employeeId = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@") ?: ""
+
+    LaunchedEffect(Unit) {
+        taskViewModel.loadTasksForEmployee(employeeId)
+    }
 
     if (showLocationSettingsDialog) {
         AlertDialog(
@@ -626,6 +636,12 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
                 Spacer(modifier = Modifier.height(32.dp))
             }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            EmployeeTaskView(
+                viewModel = taskViewModel,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         // Snackbar host

@@ -8,6 +8,8 @@ plugins {
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.kotlinJvm) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
+    id("com.google.dagger.hilt.android") version "2.56.2" apply false
+    alias(libs.plugins.ksp) apply false  // Use from version catalog
 
     id("com.google.gms.google-services") version "4.4.2" apply false
 }

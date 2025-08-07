@@ -13,6 +13,8 @@ plugins {
 
     // Kotlin Serialization Plugin
     alias(libs.plugins.kotlinSerialization)
+    id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
 
     id("com.google.gms.google-services")
 }
@@ -24,7 +26,7 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
-    
+
     listOf(
         iosX64(),
         iosArm64(),
@@ -35,9 +37,9 @@ kotlin {
             isStatic = true
         }
     }
-    
+
     jvm("desktop")
-    
+
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         outputModuleName.set("composeApp")
@@ -57,30 +59,28 @@ kotlin {
         }
         binaries.executable()
     }
-    
+
     sourceSets {
         val desktopMain by getting
-        
+
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
 
-            implementation(libs.firebase.config)
-
-            // material icons, we need arrow back icon for navigation button
             implementation(compose.materialIconsExtended)
-
             implementation(project.dependencies.platform("com.google.firebase:firebase-bom:32.7.2"))
             implementation(libs.firebase.auth.ktx)
             implementation(libs.firebase.analytics)
-
+            implementation(libs.firebase.messaging.ktx)
             implementation(libs.firebase.database.ktx)
-
+            implementation(libs.firebase.config.ktx)
+            implementation(libs.androidx.lifecycle.viewmodel.ktx)
+            implementation(libs.androidx.lifecycle.runtime.ktx)
             implementation(libs.play.services.location)
-
+            implementation(libs.activity.compose)
             implementation(libs.accompanist.permissions)
-
             implementation(libs.accompanist.swiperefresh)
+            implementation(libs.gms.play.services.location)
 
         }
         commonMain.dependencies {
@@ -102,8 +102,6 @@ kotlin {
             implementation(compose.materialIconsExtended)
 
             implementation(compose.runtime)
-
-
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -144,6 +142,10 @@ android {
 
 dependencies {
     debugImplementation(compose.uiTooling)
+
+    implementation(libs.google.hilt.android)
+    ksp(libs.hilt.android.compiler)
+    implementation(libs.androidx.hilt.hilt.navigation.compose) // For Compose
 }
 
 compose.desktop {
