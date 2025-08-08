@@ -76,8 +76,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     var showLocationSettingsDialog by remember { mutableStateOf(false) }
 
     val taskViewModel: TaskEmployeeViewModel = hiltViewModel()
-    val employeeId = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@") ?: ""
-
+    val employeeId = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@")?.lowercase() ?: ""
     LaunchedEffect(Unit) {
         taskViewModel.loadTasksForEmployee(employeeId)
     }
@@ -634,14 +633,26 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     statusText = statusText
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Your Tasks",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        EmployeeTaskView(
+                            viewModel = taskViewModel,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            EmployeeTaskView(
-                viewModel = taskViewModel,
-                modifier = Modifier.fillMaxWidth()
-            )
         }
 
         // Snackbar host

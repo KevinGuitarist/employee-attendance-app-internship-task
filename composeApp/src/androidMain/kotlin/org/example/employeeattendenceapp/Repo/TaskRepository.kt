@@ -1,5 +1,6 @@
 package org.example.employeeattendenceapp.Repo
 
+import android.util.Log
 import com.google.firebase.database.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -44,18 +45,22 @@ class TaskRepository @Inject constructor(
     }
 
     fun getTasksForEmployee(employeeId: String): Flow<List<Task>> = callbackFlow {
-        val listener = tasksRef.orderByChild("employeeId").equalTo(employeeId)
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val tasks = snapshot.children.mapNotNull { it.getValue(Task::class.java) }
-                    trySend(tasks)
-                }
+        // Convert email prefix to match the case used in database
+        val dbEmployeeId = employeeId.replaceFirstChar { it.uppercase() } // "employee1" -> "Employee1"
 
-                override fun onCancelled(error: DatabaseError) {
-                    close(error.toException())
-                }
-            })
+        val query = tasksRef.orderByChild("employeeId").equalTo(dbEmployeeId)
 
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val tasks = snapshot.children.mapNotNull { it.getValue(Task::class.java) }
+                trySend(tasks)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
+        }
+
+        query.addValueEventListener(listener)
         awaitClose { tasksRef.removeEventListener(listener) }
     }
 

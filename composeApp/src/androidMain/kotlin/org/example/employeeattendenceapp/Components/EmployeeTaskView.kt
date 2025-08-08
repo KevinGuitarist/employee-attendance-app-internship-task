@@ -6,14 +6,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
+import org.example.employeeattendenceapp.R
 import org.example.employeeattendenceapp.data.model.Task
 import org.example.employeeattendenceapp.ui.employee.TaskEmployeeViewModel
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun EmployeeTaskView(
@@ -23,25 +29,81 @@ fun EmployeeTaskView(
     val tasks by viewModel.tasks.collectAsState()
     val selectedTask by viewModel.selectedTask.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
-    Column(modifier = modifier) {
-        Text("Your Tasks", style = MaterialTheme.typography.titleLarge)
+    // Get current employee ID
+    val employeeId = remember {
+        FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@")?.lowercase() ?: ""
+    }
 
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+    Column(modifier = modifier) {  // Remove any verticalScroll from here
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Your Tasks", style = MaterialTheme.typography.titleLarge)
+
+            IconButton(
+                onClick = {
+                    coroutineScope.launch {
+                        viewModel.loadTasksForEmployee(employeeId)
+                        snackbarHostState.showSnackbar("Refreshing tasks...")
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,  // Using Material Icons
+                    contentDescription = "Refresh"
+                )
             }
-        } else if (tasks.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No tasks assigned yet", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        when {
+            isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),  // Fixed height for loading
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(tasks) { task ->
-                    TaskCard(
-                        task = task,
-                        onClick = { viewModel.selectTask(task) }
-                    )
+            tasks.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),  // Fixed height for empty state
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No tasks assigned yet")
+                        Button(
+                            onClick = {
+                                viewModel.loadTasksForEmployee(employeeId)
+                            },
+                            modifier = Modifier.padding(top = 16.dp)
+                        ) {
+                            Text("Check Again")
+                        }
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)  // Constrained height
+                ) {
+                    items(tasks) { task ->
+                        TaskCard(
+                            task = task,
+                            onClick = { viewModel.selectTask(task) }
+                        )
+                    }
                 }
             }
         }

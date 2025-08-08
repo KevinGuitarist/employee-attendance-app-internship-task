@@ -1,5 +1,6 @@
 package org.example.employeeattendenceapp.ui.employee
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,9 +35,16 @@ class TaskEmployeeViewModel @Inject constructor(
 
     fun loadTasksForEmployee(employeeId: String) {
         viewModelScope.launch {
+            Log.d("TaskEmployeeViewModel", "Loading tasks for employee: $employeeId")
             _isLoading.value = true
-            taskRepository.getTasksForEmployee(employeeId).collect { tasks ->
-                _tasks.value = tasks
+            try {
+                taskRepository.getTasksForEmployee(employeeId).collect { tasks ->
+                    Log.d("TaskEmployeeViewModel", "Received ${tasks.size} tasks")
+                    _tasks.value = tasks
+                    _isLoading.value = false
+                }
+            } catch (e: Exception) {
+                Log.e("TaskEmployeeViewModel", "Error loading tasks", e)
                 _isLoading.value = false
             }
         }
