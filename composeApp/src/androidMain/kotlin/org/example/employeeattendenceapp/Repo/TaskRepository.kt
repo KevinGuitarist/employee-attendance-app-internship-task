@@ -64,20 +64,18 @@ class TaskRepository @Inject constructor(
         awaitClose { tasksRef.removeEventListener(listener) }
     }
 
-    fun getTasksForAdmin(adminId: String): Flow<List<Task>> = callbackFlow {
-        val listener = tasksRef.orderByChild("adminId").equalTo(adminId)
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val tasks = snapshot.children.mapNotNull { it.getValue(Task::class.java) }
-                    trySend(tasks)
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    close(error.toException())
-                }
-            })
-
-        awaitClose { tasksRef.removeEventListener(listener) }
+    fun sendTaskUpdateNotification(adminId: String, employeeName: String, taskTitle: String, newStatus: String, comment: String) {
+        val notificationRef = database.getReference("notifications").push()
+        val notification = mapOf(
+            "adminId" to adminId,
+            "employeeName" to employeeName,
+            "taskTitle" to taskTitle,
+            "newStatus" to newStatus,
+            "comment" to comment,
+            "timestamp" to System.currentTimeMillis(),
+            "read" to false
+        )
+        notificationRef.setValue(notification)
     }
 
     suspend fun deleteTask(taskId: String): Result<Unit> {

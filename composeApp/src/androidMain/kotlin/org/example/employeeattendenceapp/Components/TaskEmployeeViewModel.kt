@@ -67,4 +67,16 @@ class TaskEmployeeViewModel @Inject constructor(
             onComplete()
         }
     }
+
+    fun sendTaskUpdateNotification(
+        adminId: String,
+        employeeName: String,
+        taskTitle: String,
+        newStatus: String,
+        comment: String
+    ) {
+        viewModelScope.launch {
+            taskRepository.sendTaskUpdateNotification(adminId, employeeName, taskTitle, newStatus, comment)
+        }
+    }
 }

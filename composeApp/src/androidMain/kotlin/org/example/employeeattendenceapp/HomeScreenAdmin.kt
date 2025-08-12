@@ -78,6 +78,41 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
 
     var selectedEmployee by remember { mutableStateOf<Pair<String, String>?>(null) }
 
+    var notifications by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var showNotifications by remember { mutableStateOf(false) }
+
+    val unreadCount by remember(notifications) {
+        derivedStateOf {
+            notifications.count { !(it["read"] as? Boolean ?: false) }
+        }
+    }
+
+    // Add this LaunchedEffect to load notifications
+    LaunchedEffect(Unit) {
+        val currentAdminId = FirebaseAuth.getInstance().currentUser?.uid ?: return@LaunchedEffect
+        val notificationsRef = Firebase.database.reference.child("notifications")
+            .orderByChild("adminId")
+            .equalTo(currentAdminId)
+
+        notificationsRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val newNotifications = mutableListOf<Map<String, Any?>>()
+                snapshot.children.forEach { child ->
+                    val notification = child.value as? Map<String, Any?> ?: return@forEach
+                    newNotifications.add(notification + ("key" to child.key))
+                }
+                notifications = newNotifications.sortedByDescending {
+                    (it["timestamp"] as? Long) ?: 0L
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("Notifications", "Error loading notifications", error.toException())
+            }
+        })
+    }
+
+
     // Fetch attendance data from Firebase
     LaunchedEffect(Unit) {
         val usersRef = database.child("users")
@@ -427,7 +462,6 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                 }
             }
 
-            // Quick Actions
             Text("Quick Actions", modifier = Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -447,15 +481,92 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                 }
             }
 
-            Button(
-                onClick = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                border = ButtonDefaults.outlinedButtonBorder
-            ) {
-                Text("Monthly Report", color = Color.Black)
+            Column {
+                Button(
+                    onClick = {},
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    border = ButtonDefaults.outlinedButtonBorder
+                ) {
+                    Text("Monthly Report", color = Color.Black)
+                }
+
+                // Add Notifications button
+                Button(
+                    onClick = { showNotifications = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    border = ButtonDefaults.outlinedButtonBorder
+                ) {
+                    Text("View Updates (${unreadCount})", color = Color.Black)
+                }
+            }
+
+            if (showNotifications) {
+                AlertDialog(
+                    onDismissRequest = { showNotifications = false },
+                    title = { Text("Task Updates") },
+                    text = {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            if (notifications.isEmpty()) {
+                                Text("No updates yet", modifier = Modifier.padding(16.dp))
+                            } else {
+                                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                                    items(notifications.size) { index ->  // Changed to use notifications.size
+                                        val notification = notifications[index]  // Get the notification at the current index
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if ((notification["read"] as? Boolean) == true) Color.White
+                                                else Color(0xFFE3F2FD)
+                                            )
+                                        ) {
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                Text(
+                                                    "${notification["employeeName"]} updated task:",
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text("\"${notification["taskTitle"]}\"")
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text("New status: ${notification["newStatus"]}")
+                                                if ((notification["comment"] as? String).orEmpty().isNotEmpty()) {
+                                                    Text("Comment: ${notification["comment"]}")
+                                                }
+                                                Text(
+                                                    SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+                                                        .format(Date((notification["timestamp"] as? Long) ?: 0L)),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            // Mark all as read
+                            notifications.forEach { notification ->
+                                val notificationId = notification["key"] as? String ?: return@forEach
+                                Firebase.database.reference.child("notifications")
+                                    .child(notificationId)
+                                    .child("read")
+                                    .setValue(true)
+                            }
+                            showNotifications = false
+                        }) {
+                            Text("Close")
+                        }
+                    }
+                )
             }
         }
     }

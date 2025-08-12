@@ -150,7 +150,17 @@ fun EmployeeTaskView(
                                         task = task,
                                         status = "In Progress",
                                         response = response,
-                                        onComplete = { viewModel.clearSelection() }
+                                        onComplete = {
+                                            viewModel.clearSelection()
+                                            // Send notification to admin
+                                            viewModel.sendTaskUpdateNotification(
+                                                adminId = task.adminId,
+                                                employeeName = task.employeeName,
+                                                taskTitle = task.title,
+                                                newStatus = "In Progress",
+                                                comment = response
+                                            )
+                                        }
                                     )
                                 }
                             ) {
@@ -165,7 +175,17 @@ fun EmployeeTaskView(
                                         task = task,
                                         status = "Completed",
                                         response = response,
-                                        onComplete = { viewModel.clearSelection() }
+                                        onComplete = {
+                                            viewModel.clearSelection()
+                                            // Send notification to admin
+                                            viewModel.sendTaskUpdateNotification(
+                                                adminId = task.adminId,
+                                                employeeName = task.employeeName,
+                                                taskTitle = task.title,
+                                                newStatus = "Completed",
+                                                comment = response
+                                            )
+                                        }
                                     )
                                 },
                                 colors = ButtonDefaults.buttonColors(
