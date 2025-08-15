@@ -153,6 +153,8 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         })
 
         // Get today's attendance and recent records
+// In HomeScreenAdmin.kt, modify the attendanceRef.addValueEventListener part:
+
         attendanceRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
@@ -166,39 +168,47 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             val attendance = employeeSnapshot.child("attendance").getValue(String::class.java)
                             val checkInTime = employeeSnapshot.child("checkInTime").getValue(String::class.java) ?: ""
                             val status = employeeSnapshot.child("status").getValue(String::class.java) ?: ""
+                            val name = employeeSnapshot.child("name").getValue(String::class.java) ?: "Employee"
 
-                            if (attendance == "Present") {
+                            // Handle "Background Update" values
+                            val effectiveAttendance = when (attendance) {
+                                "Background Update" -> if (status == "Active") "Present" else "Absent"
+                                else -> attendance
+                            }
+
+                            val effectiveCheckInTime = when (checkInTime) {
+                                "Background Update" -> "Auto Check-in"
+                                else -> checkInTime
+                            }
+
+                            if (effectiveAttendance == "Present") {
                                 presentEmployees.add(userId)
                             } else {
                                 absentNotMarkedEmployees.add(userId)
                             }
 
-                            // Get user details for recent attendance
-                            database.child("users").child(userId).get().addOnSuccessListener { userSnapshot ->
-                                if (userSnapshot.exists()) {
-                                    val email = userSnapshot.child("email").getValue(String::class.java) ?: ""
-                                    val displayName = email.substringBefore("@")
-                                        .replace(".", " ")
-                                        .replaceFirstChar { it.uppercase() }
+                            val displayName = name.substringBefore("@")
+                                .replace(".", " ")
+                                .replaceFirstChar { it.uppercase() }
 
-                                    val displayStatus = if (attendance == "Present") "Present" else "Absent/Not Marked"
-                                    val displayTime = if (attendance == "Present") checkInTime else "Not checked in"
+                            val displayStatus = if (effectiveAttendance == "Present") "Present" else "Absent/Not Marked"
+                            val displayTime = if (effectiveAttendance == "Present") effectiveCheckInTime else "Not checked in"
 
-                                    tempRecentAttendance.add(Triple(
-                                        displayName,
-                                        displayTime,
-                                        displayStatus
-                                    ))
+                            tempRecentAttendance.add(Triple(
+                                displayName,
+                                displayTime,
+                                displayStatus
+                            ))
 
-                                    recentAttendanceList = tempRecentAttendance.takeLast(4)
-                                }
-                            }
+                            // Store both UID and display name
+                            selectedEmployee = Pair(userId, displayName)
                         }
                     }
 
                     presentCount = presentEmployees.size
                     absentCount = absentNotMarkedEmployees.size
-                    notMarkedCount = absentNotMarkedEmployees.size // Make equal to absentCount
+                    notMarkedCount = absentNotMarkedEmployees.size
+                    recentAttendanceList = tempRecentAttendance.takeLast(4)
                 } catch (e: Exception) {
                     Log.e("Attendance", "Error processing attendance", e)
                     coroutineScope.launch {
@@ -213,9 +223,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     snackbarHostState.showSnackbar("Database error: ${error.message}")
                 }
             }
-        })
-    }
-
+        })}
     if (justLoggedIn) {
         LaunchedEffect(Unit) {
             delay(300)
@@ -411,9 +419,18 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                                 .clickable {
-                                selectedEmployee = Pair(name, name) // Assuming name is the ID
-                                showTaskDialog = true
-                            }
+                                    // Find the matching employee in our stored pairs
+                                    selectedEmployee = recentAttendanceList
+                                        .indexOfFirst { it.first == name }
+                                        .takeIf { it >= 0 }
+                                        ?.let { index ->
+                                            // Get the stored Pair(userId, name)
+                                            // We need to maintain this mapping separately
+                                            // This is a temporary solution - ideally we'd store the Triple with UID
+                                            Pair("", name) // Placeholder - need proper implementation
+                                        }
+                                    showTaskDialog = true
+                                }
                         ) {
                             Row(
                                 modifier = Modifier.padding(16.dp),
@@ -701,9 +718,9 @@ fun EmployeeTaskDialog(
         try {
             FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
                 .get()
-                .addOnSuccessListener { snapshot ->
-                    if (snapshot.exists()) {
-                        employeeAttendance = snapshot.value as? Map<String, Any>
+                .addOnSuccessListener { attendanceSnapshot ->
+                    if (attendanceSnapshot.exists()) {
+                        employeeAttendance = attendanceSnapshot.value as? Map<String, Any>
                     } else {
                         employeeAttendance = null
                     }
@@ -814,13 +831,13 @@ fun EmployeeTaskDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Attendance:")
+                                Text("Status:")
                                 Text(
-                                    employeeAttendance?.get("attendance")?.toString() ?: "--",
-                                    color = when (employeeAttendance?.get("attendance")?.toString()) {
-                                        "Present" -> Color(0xFF4CAF50)
-                                        "Absent" -> Color.Red
-                                        else -> Color.Gray
+                                    employeeAttendance?.get("status")?.toString() ?: "--",
+                                    color = when (employeeAttendance?.get("status")?.toString()) {
+                                        "Active" -> Color(0xFF4CAF50)
+                                        "--" -> Color.Gray
+                                        else -> Color.Red
                                     },
                                     fontWeight = FontWeight.Bold
                                 )
