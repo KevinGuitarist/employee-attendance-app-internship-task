@@ -36,6 +36,7 @@ import org.example.employeeattendenceapp.Auth.clearUserRole
 import org.example.employeeattendenceapp.Auth.signOut
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Send
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -49,6 +50,7 @@ import org.example.employeeattendenceapp.viewmodels.TaskAdminViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.google.firebase.database.FirebaseDatabase
 
 @Composable
 actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
@@ -688,12 +690,161 @@ fun EmployeeTaskDialog(
     var taskDescription by remember { mutableStateOf("") }
     var taskDueDate by remember { mutableStateOf("") }
 
+    // State for employee attendance details
+    var employeeAttendance by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var selectedDate by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+    var isLoadingAttendance by remember { mutableStateOf(false) }
+
+    // Fetch employee attendance data
+    LaunchedEffect(employeeId, selectedDate) {
+        isLoadingAttendance = true
+        try {
+            FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
+                .get()
+                .addOnSuccessListener { snapshot ->
+                    if (snapshot.exists()) {
+                        employeeAttendance = snapshot.value as? Map<String, Any>
+                    } else {
+                        employeeAttendance = null
+                    }
+                    isLoadingAttendance = false
+                }
+                .addOnFailureListener {
+                    employeeAttendance = null
+                    isLoadingAttendance = false
+                }
+        } catch (e: Exception) {
+            employeeAttendance = null
+            isLoadingAttendance = false
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Assign Task to $employeeName") },
+        title = { Text("Employee: $employeeName") },
         text = {
             Column {
+                // Date selector
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text("View attendance for:", modifier = Modifier.padding(end = 8.dp))
+                    DatePickerTextField(
+                        initialDate = selectedDate,
+                        onDateSelected = { selectedDate = it }
+                    )
+                }
+
+                // Attendance details section
+                if (isLoadingAttendance) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                } else if (employeeAttendance != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "Attendance Details",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            // Status row with color coding
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Status:")
+                                Text(
+                                    employeeAttendance?.get("status")?.toString() ?: "--",
+                                    color = when (employeeAttendance?.get("status")?.toString()) {
+                                        "Active" -> Color(0xFF4CAF50)
+                                        "--" -> Color.Gray
+                                        else -> Color.Red
+                                    },
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Location row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Location:")
+                                Text(
+                                    "${employeeAttendance?.get("latitude")?.toString()?.take(7)}, " +
+                                            "${employeeAttendance?.get("longitude")?.toString()?.take(7)}"
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Check-in time
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Check-in:")
+                                Text(employeeAttendance?.get("checkInTime")?.toString() ?: "--")
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Working hours
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Working hours:")
+                                Text(employeeAttendance?.get("workingHours")?.toString() ?: "--")
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Attendance status
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Attendance:")
+                                Text(
+                                    employeeAttendance?.get("attendance")?.toString() ?: "--",
+                                    color = when (employeeAttendance?.get("attendance")?.toString()) {
+                                        "Present" -> Color(0xFF4CAF50)
+                                        "Absent" -> Color.Red
+                                        else -> Color.Gray
+                                    },
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        "No attendance record for selected date",
+                        color = Color.Gray,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
                 // Task Assignment Form
+                Text(
+                    "Assign Task to $employeeName",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
                 OutlinedTextField(
                     value = taskTitle,
                     onValueChange = { taskTitle = it },
@@ -793,6 +944,67 @@ fun TaskItem(task: Task) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Response: ${task.employeeResponse}")
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DatePickerTextField(
+    initialDate: String,
+    onDateSelected: (String) -> Unit
+) {
+    var showDatePicker by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf(initialDate) }
+
+    val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+
+    // Parse initial date
+    val parsedDate = remember(initialDate) {
+        try {
+            dateFormat.parse(initialDate) ?: Date()
+        } catch (e: Exception) {
+            Date()
+        }
+    }
+
+    OutlinedTextField(
+        value = selectedDate,
+        onValueChange = {},
+        readOnly = true,
+        trailingIcon = {
+            IconButton(onClick = { showDatePicker = true }) {
+                Icon(Icons.Default.CalendarToday, contentDescription = "Select date")
+            }
+        },
+        modifier = Modifier.width(150.dp)
+    )
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = parsedDate.time)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            val newDate = dateFormat.format(Date(it))
+                            selectedDate = newDate
+                            onDateSelected(newDate)
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
