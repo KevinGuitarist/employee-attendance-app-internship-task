@@ -757,93 +757,46 @@ fun EmployeeTaskDialog(
                 if (isLoadingAttendance) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
                 } else if (employeeAttendance != null) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "Attendance Details",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
+                    // Attendance details section
+                    if (employeeAttendance != null) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Attendance Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                            // Status row with color coding
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Status:")
-                                Text(
-                                    employeeAttendance?.get("status")?.toString() ?: "--",
-                                    color = when (employeeAttendance?.get("status")?.toString()) {
-                                        "Active" -> Color(0xFF4CAF50)
-                                        "--" -> Color.Gray
-                                        else -> Color.Red
-                                    },
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Check-in time:")
+                                    Text(employeeAttendance?.get("checkInTime")?.toString() ?: "--")
+                                }
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(Modifier.height(6.dp))
 
-                            // Location row
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Location:")
-                                Text(
-                                    "${employeeAttendance?.get("latitude")?.toString()?.take(7)}, " +
-                                            "${employeeAttendance?.get("longitude")?.toString()?.take(7)}"
-                                )
-                            }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Attendance:")
+                                    Text(employeeAttendance?.get("attendance")?.toString() ?: "--")
+                                }
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(Modifier.height(6.dp))
 
-                            // Check-in time
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Check-in:")
-                                Text(employeeAttendance?.get("checkInTime")?.toString() ?: "--")
-                            }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Working hours:")
+                                    Text(employeeAttendance?.get("workingHours")?.toString() ?: "--")
+                                }
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(Modifier.height(6.dp))
 
-                            // Working hours
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Working hours:")
-                                Text(employeeAttendance?.get("workingHours")?.toString() ?: "--")
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            // Attendance status
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Status:")
-                                Text(
-                                    employeeAttendance?.get("status")?.toString() ?: "--",
-                                    color = when (employeeAttendance?.get("status")?.toString()) {
-                                        "Active" -> Color(0xFF4CAF50)
-                                        "--" -> Color.Gray
-                                        else -> Color.Red
-                                    },
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Location:")
+                                    Text(employeeAttendance?.get("location")?.toString() ?: "--")
+                                }
                             }
                         }
                     }
+
                 } else {
                     Text(
                         "No attendance record for selected date",

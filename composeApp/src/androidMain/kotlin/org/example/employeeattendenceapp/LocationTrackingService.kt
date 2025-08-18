@@ -173,11 +173,7 @@ class LocationTrackingService : Service() {
         val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) &&
                 now.isBefore(officeEndTime.plusNanos(1))
 
-        val status = when {
-            !isOfficeTime -> "--"
-            isInOfficeZone -> "Active"
-            else -> "--"
-        }
+        val locationStatus = if (isInOfficeZone) "In Office" else "Not in Office"
 
         FirebaseDatabase.getInstance().getReference("attendance/$formattedDate/$uid").setValue(
             mapOf(
@@ -189,7 +185,7 @@ class LocationTrackingService : Service() {
                 "checkInTime" to "Background Update",
                 "workingHours" to "Background Update",
                 "attendance" to "Background Update",
-                "status" to status
+                "location" to locationStatus
             )
         )
     }

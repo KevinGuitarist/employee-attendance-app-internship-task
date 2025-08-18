@@ -193,6 +193,14 @@ fun updateEmployeeAttendance(
     attendance: String,
     status: String
 ) {
+    val officeLat = 29.275748
+    val officeLon = 79.545030
+    val locationStatus = if (latitude != null && longitude != null) {
+        val dist = FloatArray(1)
+        android.location.Location.distanceBetween(latitude, longitude, officeLat, officeLon, dist)
+        if (dist[0] <= 100) "In Office" else "Not in Office"
+    } else "--"
+
     // This will ensure no duplicates - overwrites existing data
     val attendanceRef = FirebaseDatabase.getInstance()
         .getReference("attendance")
@@ -208,7 +216,8 @@ fun updateEmployeeAttendance(
         "checkInTime" to checkInTime,
         "workingHours" to workingHours,
         "attendance" to attendance,
-        "status" to status
+        "status" to status,
+        "location" to locationStatus
     )
 
     attendanceRef.setValue(attendanceData)
@@ -241,7 +250,8 @@ fun saveDailyRecord(
         "checkInTime" to checkInTime,
         "workingHours" to workingHours,
         "attendance" to attendance,
-        "status" to status
+        "status" to status,
+        "location" to status
     )
 
     // Force write with setValue
