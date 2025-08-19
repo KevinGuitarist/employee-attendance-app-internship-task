@@ -719,39 +719,46 @@ fun EmployeeTaskDialog(
     var dataSource by remember { mutableStateOf("realtime") } // "realtime" or "daily"
 
     // Fetch employee attendance data
-    DisposableEffect(employeeId, selectedDate) {
+    DisposableEffect(employeeId, selectedDate, dataSource) {
         isLoadingAttendance = true
 
-        // Fetch real-time attendance
-        val attendanceRef = FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
-        val attendanceListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                realTimeAttendance = if (snapshot.exists()) snapshot.value as? Map<String, Any> else null
-                isLoadingAttendance = false
+        if (dataSource == "realtime") {
+            // Fetch real-time attendance only when realtime is selected
+            val attendanceRef = FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
+            val attendanceListener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    realTimeAttendance = if (snapshot.exists()) snapshot.value as? Map<String, Any> else null
+                    isLoadingAttendance = false
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    realTimeAttendance = null
+                    isLoadingAttendance = false
+                }
             }
-            override fun onCancelled(error: DatabaseError) {
-                realTimeAttendance = null
-                isLoadingAttendance = false
+            attendanceRef.addValueEventListener(attendanceListener)
+
+            onDispose {
+                attendanceRef.removeEventListener(attendanceListener)
             }
-        }
+        } else {
+            // Fetch daily record only when saved is selected
+            getDailyRecord(
+                date = selectedDate,
+                uid = employeeId,
+                onSuccess = { record ->
+                    dailyRecord = record
+                    isLoadingAttendance = false
+                },
+                onError = { error ->
+                    Log.e("DailyRecord", error)
+                    dailyRecord = null
+                    isLoadingAttendance = false
+                }
+            )
 
-        // Fetch daily record
-        getDailyRecord(
-            date = selectedDate,
-            uid = employeeId,
-            onSuccess = { record ->
-                dailyRecord = record
-            },
-            onError = { error ->
-                Log.e("DailyRecord", error)
-                dailyRecord = null
+            onDispose {
+                // No listener to remove for daily records
             }
-        )
-
-        attendanceRef.addValueEventListener(attendanceListener)
-
-        onDispose {
-            attendanceRef.removeEventListener(attendanceListener)
         }
     }
 
@@ -768,7 +775,6 @@ fun EmployeeTaskDialog(
             Column {
                 Text("Employee: $employeeName")
                 // Add data source selector
-                // Replace the SegmentedButtonRow section with:
                 Row(
                     modifier = Modifier.padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -794,7 +800,7 @@ fun EmployeeTaskDialog(
         },
         text = {
             Column {
-                // Date selector (existing code)
+                // Date selector
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -809,8 +815,8 @@ fun EmployeeTaskDialog(
                 // Data source info
                 Text(
                     text = when (dataSource) {
-                        "realtime" -> "Live attendance data"
-                        "daily" -> "Saved daily record"
+                        "realtime" -> "Live attendance data (updates in real-time)"
+                        "daily" -> "Saved daily record (finalized data)"
                         else -> ""
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -863,7 +869,7 @@ fun EmployeeTaskDialog(
                             // Show data source indicator
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                text = if (dataSource == "daily") "✓ Saved record" else "● Live data",
+                                text = if (dataSource == "daily") "✓ Saved record (final)" else "● Live data (updating)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (dataSource == "daily") Color(0xFF388E3C) else Color(0xFF1976D2)
                             )
