@@ -713,26 +713,28 @@ fun EmployeeTaskDialog(
     var isLoadingAttendance by remember { mutableStateOf(false) }
 
     // Fetch employee attendance data
-    LaunchedEffect(employeeId, selectedDate) {
-        isLoadingAttendance = true
-        try {
-            FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
-                .get()
-                .addOnSuccessListener { attendanceSnapshot ->
-                    if (attendanceSnapshot.exists()) {
-                        employeeAttendance = attendanceSnapshot.value as? Map<String, Any>
-                    } else {
-                        employeeAttendance = null
-                    }
-                    isLoadingAttendance = false
-                }
-                .addOnFailureListener {
+    DisposableEffect(employeeId, selectedDate) {
+        val ref = FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    employeeAttendance = snapshot.value as? Map<String, Any>
+                } else {
                     employeeAttendance = null
-                    isLoadingAttendance = false
                 }
-        } catch (e: Exception) {
-            employeeAttendance = null
-            isLoadingAttendance = false
+                isLoadingAttendance = false
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                employeeAttendance = null
+                isLoadingAttendance = false
+            }
+        }
+
+        ref.addValueEventListener(listener)
+
+        onDispose {
+            ref.removeEventListener(listener)
         }
     }
 
