@@ -91,6 +91,8 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         }
     }
 
+    var showAllEmployees by remember { mutableStateOf(false) }
+
     // Add this LaunchedEffect to load notifications
     LaunchedEffect(Unit) {
         val currentAdminId = FirebaseAuth.getInstance().currentUser?.uid ?: return@LaunchedEffect
@@ -401,12 +403,18 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("Recent Attendance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("View All", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4B89DC))
+                Text(
+                    text = if (showAllEmployees) "Show Less" else "View All",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF4B89DC),
+                    modifier = Modifier.clickable {
+                        showAllEmployees = !showAllEmployees
+                    }
+                )
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (recentAttendanceList.isEmpty()) {
-                    // Show nothing or a placeholder if no attendance records exist
                     Text(
                         "No attendance records yet",
                         style = MaterialTheme.typography.bodyMedium,
@@ -414,8 +422,15 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                         modifier = Modifier.padding(16.dp)
                     )
                 } else {
-                    recentAttendanceList.forEach { (name, time, status) ->
-                        val initials = name.take(2).uppercase() // Simple initials from first 2 chars
+                    // Determine which list to display based on showAllEmployees state
+                    val displayList = if (showAllEmployees) {
+                        recentAttendanceList  // Show all employees
+                    } else {
+                        recentAttendanceList.takeLast(4)  // Show only last 4
+                    }
+
+                    displayList.forEach { (name, time, status) ->
+                        val initials = name.take(2).uppercase()
 
                         Card(
                             shape = RoundedCornerShape(10.dp),
@@ -426,9 +441,6 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                                         .indexOfFirst { it.first == name }
                                         .takeIf { it >= 0 }
                                         ?.let { index ->
-                                            // Get the stored Pair(userId, name)
-                                            // We need to maintain this mapping separately
-                                            // This is a temporary solution - ideally we'd store the Triple with UID
                                             Pair("", name) // Placeholder - need proper implementation
                                         }
                                     showTaskDialog = true
@@ -469,17 +481,17 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             }
                         }
                     }
-                    if (showTaskDialog && selectedEmployee != null) {
-                        EmployeeTaskDialog(
-                            employeeId = selectedEmployee!!.first,
-                            employeeName = selectedEmployee!!.second,
-                            viewModel = taskViewModel,
-                            onDismiss = {
-                                showTaskDialog = false
-                                selectedEmployee = null
-                            }
-                        )
-                    }
+                }
+                if (showTaskDialog && selectedEmployee != null) {
+                    EmployeeTaskDialog(
+                        employeeId = selectedEmployee!!.first,
+                        employeeName = selectedEmployee!!.second,
+                        viewModel = taskViewModel,
+                        onDismiss = {
+                            showTaskDialog = false
+                            selectedEmployee = null
+                        }
+                    )
                 }
             }
 
