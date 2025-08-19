@@ -573,50 +573,44 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     return@launch
                                 }
 
-                                // Save to daily_records first
-                                val saveResult = try {
-                                    org.example.employeeattendenceapp.Auth.saveDailyRecord(
-                                        uid = uid,
-                                        name = userName,
-                                        date = formattedDate,
-                                        day = formattedDay,
-                                        checkInTime = checkInTime ?: "Not Marked",
-                                        workingHours = workingHours,
-                                        attendance = attendanceStatus,
-                                        status = statusText,
-                                        onSuccess = {
-                                            // Don't reset here - we'll do it after both operations complete
-                                        },
-                                        onError = { error ->
-                                            launch {
-                                                snackbarHostState.showSnackbar("Daily record error: $error")
-                                            }
+                                // Save to daily_records with proper callback handling
+                                org.example.employeeattendenceapp.Auth.saveDailyRecord(
+                                    uid = uid,
+                                    name = userName,
+                                    date = formattedDate,
+                                    day = formattedDay,
+                                    checkInTime = checkInTime ?: "Not Marked",
+                                    workingHours = workingHours,
+                                    attendance = attendanceStatus,
+                                    status = statusText,
+                                    onSuccess = {
+                                        // After successful save to daily_records, update real-time attendance
+                                        coroutineScope.launch {
+                                            org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
+                                                uid = uid,
+                                                name = userName,
+                                                date = formattedDate,
+                                                day = formattedDay,
+                                                latitude = latitude,
+                                                longitude = longitude,
+                                                checkInTime = "Not Marked",
+                                                workingHours = "0h 0m 0s",
+                                                attendance = "Absent",
+                                                status = "--"
+                                            )
+
+                                            // Reset the local state
+                                            attendanceState.resetForNewDay()
+                                            snackbarHostState.showSnackbar("Signed off successfully! Data saved.")
                                         }
-                                    )
-                                    true
-                                } catch (e: Exception) {
-                                    false
-                                }
-
-                                if (saveResult) {
-                                    // Then update attendance (without callbacks)
-                                    org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
-                                        uid = uid,
-                                        name = userName,
-                                        date = formattedDate,
-                                        day = formattedDay,
-                                        latitude = latitude,
-                                        longitude = longitude,
-                                        checkInTime = "Not Marked", // Reset check-in time
-                                        workingHours = "0h 0m 0s", // Reset working hours
-                                        attendance = "Absent",      // Reset attendance status
-                                        status = "--"              // Reset current status
-                                    )
-
-                                    // Now reset the local state
-                                    attendanceState.resetForNewDay()
-                                    snackbarHostState.showSnackbar("Signed off successfully! Data saved.")
-                                }
+                                    },
+                                    onError = { error ->
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Daily record error: $error")
+                                            Log.e("SignOff", "Daily record save failed: $error")
+                                        }
+                                    }
+                                )
                             } catch (e: Exception) {
                                 snackbarHostState.showSnackbar("Sign-off failed: ${e.localizedMessage}")
                                 Log.e("SignOff", "Error during sign-off", e)

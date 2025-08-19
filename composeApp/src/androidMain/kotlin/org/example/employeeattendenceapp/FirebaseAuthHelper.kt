@@ -262,3 +262,24 @@ fun saveDailyRecord(
             Log.e("Firebase", "Error saving daily record: ${e.message}")
         }
 }
+
+actual fun getDailyRecord(
+    date: String,
+    uid: String,
+    onSuccess: (Map<String, Any>?) -> Unit,
+    onError: (String) -> Unit
+) {
+    FirebaseDatabase.getInstance().getReference("daily_records/$date/$uid")
+        .get()
+        .addOnSuccessListener { snapshot ->
+            if (snapshot.exists()) {
+                val record = snapshot.value as? Map<String, Any>
+                onSuccess(record)
+            } else {
+                onSuccess(null)
+            }
+        }
+        .addOnFailureListener { e ->
+            onError("Failed to fetch daily record: ${e.message}")
+        }
+}

@@ -51,6 +51,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.firebase.database.FirebaseDatabase
+import org.example.employeeattendenceapp.Auth.getDailyRecord
+import androidx.compose.material3.SegmentedButton
 
 @Composable
 actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
@@ -712,38 +714,87 @@ fun EmployeeTaskDialog(
     var selectedDate by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
     var isLoadingAttendance by remember { mutableStateOf(false) }
 
+    var realTimeAttendance by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var dailyRecord by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var dataSource by remember { mutableStateOf("realtime") } // "realtime" or "daily"
+
     // Fetch employee attendance data
     DisposableEffect(employeeId, selectedDate) {
-        val ref = FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
-        val listener = object : ValueEventListener {
+        isLoadingAttendance = true
+
+        // Fetch real-time attendance
+        val attendanceRef = FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
+        val attendanceListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    employeeAttendance = snapshot.value as? Map<String, Any>
-                } else {
-                    employeeAttendance = null
-                }
+                realTimeAttendance = if (snapshot.exists()) snapshot.value as? Map<String, Any> else null
                 isLoadingAttendance = false
             }
-
             override fun onCancelled(error: DatabaseError) {
-                employeeAttendance = null
+                realTimeAttendance = null
                 isLoadingAttendance = false
             }
         }
 
-        ref.addValueEventListener(listener)
+        // Fetch daily record
+        getDailyRecord(
+            date = selectedDate,
+            uid = employeeId,
+            onSuccess = { record ->
+                dailyRecord = record
+            },
+            onError = { error ->
+                Log.e("DailyRecord", error)
+                dailyRecord = null
+            }
+        )
+
+        attendanceRef.addValueEventListener(attendanceListener)
 
         onDispose {
-            ref.removeEventListener(listener)
+            attendanceRef.removeEventListener(attendanceListener)
         }
+    }
+
+    // Determine which data to display
+    val displayData = when (dataSource) {
+        "realtime" -> realTimeAttendance
+        "daily" -> dailyRecord
+        else -> null
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Employee: $employeeName") },
+        title = {
+            Column {
+                Text("Employee: $employeeName")
+                // Add data source selector
+                // Replace the SegmentedButtonRow section with:
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Data source:", modifier = Modifier.padding(end = 8.dp))
+                    Row {
+                        // Live button
+                        FilterChip(
+                            selected = dataSource == "realtime",
+                            onClick = { dataSource = "realtime" },
+                            label = { Text("Live") },
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        // Saved button
+                        FilterChip(
+                            selected = dataSource == "daily",
+                            onClick = { dataSource = "daily" },
+                            label = { Text("Saved") }
+                        )
+                    }
+                }
+            }
+        },
         text = {
             Column {
-                // Date selector
+                // Date selector (existing code)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -755,53 +806,72 @@ fun EmployeeTaskDialog(
                     )
                 }
 
-                // Attendance details section
+                // Data source info
+                Text(
+                    text = when (dataSource) {
+                        "realtime" -> "Live attendance data"
+                        "daily" -> "Saved daily record"
+                        else -> ""
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
                 if (isLoadingAttendance) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-                } else if (employeeAttendance != null) {
-                    // Attendance details section
-                    if (employeeAttendance != null) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text("Attendance Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                } else if (displayData != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "Attendance Details",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Check-in time:")
-                                    Text(employeeAttendance?.get("checkInTime")?.toString() ?: "--")
-                                }
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Attendance:")
-                                    Text(employeeAttendance?.get("attendance")?.toString() ?: "--")
-                                }
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Working hours:")
-                                    Text(employeeAttendance?.get("workingHours")?.toString() ?: "--")
-                                }
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Location:")
-                                    Text(employeeAttendance?.get("location")?.toString() ?: "--")
-                                }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Check-in time:")
+                                Text(displayData["checkInTime"]?.toString() ?: "--")
                             }
+
+                            Spacer(Modifier.height(6.dp))
+
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Attendance:")
+                                Text(displayData["attendance"]?.toString() ?: "--")
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Working hours:")
+                                Text(displayData["workingHours"]?.toString() ?: "--")
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Location:")
+                                Text(displayData["location"]?.toString() ?: "--")
+                            }
+
+                            // Show data source indicator
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = if (dataSource == "daily") "✓ Saved record" else "● Live data",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (dataSource == "daily") Color(0xFF388E3C) else Color(0xFF1976D2)
+                            )
                         }
                     }
-
                 } else {
                     Text(
-                        "No attendance record for selected date",
+                        "No ${if (dataSource == "daily") "saved" else "attendance"} record for selected date",
                         color = Color.Gray,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )

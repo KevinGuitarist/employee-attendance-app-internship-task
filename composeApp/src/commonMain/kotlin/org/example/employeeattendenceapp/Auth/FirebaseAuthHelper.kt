@@ -23,3 +23,9 @@ expect fun signOut()
 expect fun saveUserRole(context: Any, role: String)
 expect fun getUserRole(context: Any): String?
 expect fun clearUserRole(context: Any)
+expect fun getDailyRecord(
+    date: String,
+    uid: String,
+    onSuccess: (Map<String, Any>?) -> Unit,
+    onError: (String) -> Unit
+)
