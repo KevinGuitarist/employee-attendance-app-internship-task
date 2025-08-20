@@ -120,6 +120,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
 
 
     // Fetch attendance data from Firebase
+    // Fetch attendance data from Firebase
     LaunchedEffect(Unit) {
         val usersRef = database.child("users")
         val attendanceRef = database.child("attendance").child(todayDate)
@@ -129,17 +130,24 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
                     var count = 0
-                    val tempRecentAttendance = mutableListOf<Triple<String, String, String>>()
+                    val employeeIds = mutableListOf<String>()
 
                     if (snapshot.exists()) {
                         snapshot.children.forEach { child ->
                             val role = child.child("role").getValue(String::class.java)
                             if (role == "employee") {
                                 count++
+                                employeeIds.add(child.key ?: "")
                             }
                         }
                     }
                     totalEmployees = count
+
+                    // Now that we have employee IDs, we can properly calculate not marked
+                    if (presentCount > 0) {
+                        notMarkedCount = maxOf(0, totalEmployees - presentCount)
+                        absentCount = notMarkedCount
+                    }
                 } catch (e: Exception) {
                     Log.e("EmployeeCount", "Error counting employees", e)
                     coroutineScope.launch {
@@ -150,6 +158,76 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
 
             override fun onCancelled(error: DatabaseError) {
                 Log.e("EmployeeCount", "Database error: ${error.message}")
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Database error: ${error.message}")
+                }
+            }
+        })
+
+        // Get today's attendance and recent records
+        attendanceRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                try {
+                    val presentEmployees = mutableSetOf<String>()
+                    val tempRecentAttendance = mutableListOf<Triple<String, String, String>>()
+
+                    if (snapshot.exists()) {
+                        snapshot.children.forEach { employeeSnapshot ->
+                            val userId = employeeSnapshot.key ?: ""
+                            val attendance = employeeSnapshot.child("attendance").getValue(String::class.java)
+                            val checkInTime = employeeSnapshot.child("checkInTime").getValue(String::class.java) ?: ""
+                            val status = employeeSnapshot.child("status").getValue(String::class.java) ?: ""
+                            val name = employeeSnapshot.child("name").getValue(String::class.java) ?: "Employee"
+
+                            // Handle "Background Update" values
+                            val effectiveAttendance = when (attendance) {
+                                "Background Update" -> if (status == "Active") "Present" else "Absent"
+                                else -> attendance
+                            }
+
+                            val effectiveCheckInTime = when (checkInTime) {
+                                "Background Update" -> "Auto Check-in"
+                                else -> checkInTime
+                            }
+
+                            if (effectiveAttendance == "Present") {
+                                presentEmployees.add(userId)
+                            }
+
+                            val displayName = name.substringBefore("@")
+                                .replace(".", " ")
+                                .replaceFirstChar { it.uppercase() }
+
+                            val displayStatus = if (effectiveAttendance == "Present") "Present" else "Absent"
+                            val displayTime = if (effectiveAttendance == "Present") effectiveCheckInTime else "Not checked in"
+
+                            tempRecentAttendance.add(Triple(
+                                displayName,
+                                displayTime,
+                                displayStatus
+                            ))
+
+                            // Store both UID and display name
+                            selectedEmployee = Pair(userId, displayName)
+                        }
+                    }
+
+                    presentCount = presentEmployees.size
+                    // Calculate absent/not marked based on current total
+                    notMarkedCount = maxOf(0, totalEmployees - presentCount)
+                    absentCount = notMarkedCount
+
+                    recentAttendanceList = tempRecentAttendance.takeLast(4)
+                } catch (e: Exception) {
+                    Log.e("Attendance", "Error processing attendance", e)
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Error processing attendance: ${e.message}")
+                    }
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("Attendance", "Database error: ${error.message}")
                 coroutineScope.launch {
                     snackbarHostState.showSnackbar("Database error: ${error.message}")
                 }

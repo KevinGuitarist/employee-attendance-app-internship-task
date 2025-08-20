@@ -168,7 +168,7 @@ class LocationTrackingService : Service() {
         ) <= 100
 
         val officeStartTime = LocalTime.of(9, 0)
-        val officeEndTime = LocalTime.of(18, 0)
+        val officeEndTime = LocalTime.of(22, 0)
         val now = LocalTime.now()
         val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) &&
                 now.isBefore(officeEndTime.plusNanos(1))

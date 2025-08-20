@@ -65,7 +65,7 @@ class EmployeeAttendanceState {
         val checkIn = _checkInTimeStamp.value
         if (checkIn != null) {
             val officeStartTime = LocalTime.of(9, 0)
-            val officeEndTime = LocalTime.of(18, 0)
+            val officeEndTime = LocalTime.of(22, 0)
             val now = currentTime
             val boundedNow = if (now.isAfter(officeEndTime)) officeEndTime else if (now.isBefore(officeStartTime)) officeStartTime else now
 
