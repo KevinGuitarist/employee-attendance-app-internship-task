@@ -50,6 +50,7 @@ import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.example.employeeattendenceapp.Auth.clearUserRole
@@ -445,23 +446,32 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val formattedDay = currentDate.format(dayFormatter)
 
     LaunchedEffect(
-        userName, formattedDate, formattedDay, latitude, longitude,
-        checkInTime, workingHours, attendanceStatus, statusText,
-        isInOfficeZone, locationServicesEnabled, internetConnected
+        userName, formattedDate, formattedDay, checkInTime,
+        workingHours, attendanceStatus, statusText
     ) {
         if (uid.isNotEmpty() && internetConnected) {
-            org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
-                uid = uid,
-                name = userName,
-                date = formattedDate,
-                day = formattedDay,
-                latitude = latitude,
-                longitude = longitude,
-                checkInTime = checkInTime ?: "Not Marked",
-                workingHours = workingHours,
-                attendance = attendanceStatus,
-                status = statusText
-            )
+            // Only update if this is a user-initiated action, not background data
+            if (checkInTime != "Background Update" &&
+                workingHours != "Background Update" &&
+                attendanceStatus != "Background Update") {
+
+                val updates = mapOf(
+                    "name" to userName,
+                    "date" to formattedDate,
+                    "day" to formattedDay,
+                    "workingHours" to workingHours,
+                    "attendance" to attendanceStatus,
+                    "status" to statusText,
+                    "lastUpdated" to System.currentTimeMillis(), // Add timestamp
+                    "updateSource" to "foreground" // Identify the source
+                )
+
+                FirebaseDatabase.getInstance().getReference("attendance/$formattedDate/$uid")
+                    .updateChildren(updates)
+                    .addOnFailureListener { e ->
+                        Log.e("FirebaseUpdate", "Failed to update attendance: ${e.message}")
+                    }
+            }
         }
     }
 

@@ -13,6 +13,7 @@ import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
@@ -147,16 +148,9 @@ class LocationTrackingService : Service() {
 
     private fun updateFirebase(location: Location) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val userEmail = FirebaseAuth.getInstance().currentUser?.email
-        val userName = userEmail?.substringBefore("@") ?: "Employee"
         val currentDate = LocalDate.now()
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        val dayFormatter = DateTimeFormatter.ofPattern("EEEE")
-        val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
-
         val formattedDate = currentDate.format(dateFormatter)
-        val formattedDay = currentDate.format(dayFormatter)
-        val currentTime = LocalTime.now().format(timeFormatter)
 
         val officeLat = 29.275748
         val officeLon = 79.545030
@@ -167,29 +161,21 @@ class LocationTrackingService : Service() {
             officeLon
         ) <= 100
 
-        val officeStartTime = LocalTime.of(9, 0)
-        val officeEndTime = LocalTime.of(22, 0)
-        val now = LocalTime.now()
-        val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) &&
-                now.isBefore(officeEndTime.plusNanos(1))
-
         val locationStatus = if (isInOfficeZone) "In Office" else "Not in Office"
 
-        FirebaseDatabase.getInstance().getReference("attendance/$formattedDate/$uid").setValue(
-            mapOf(
-                "name" to userName,
-                "date" to formattedDate,
-                "day" to formattedDay,
-                "latitude" to location.latitude,
-                "longitude" to location.longitude,
-                "checkInTime" to "Background Update",
-                "workingHours" to "Background Update",
-                "attendance" to "Background Update",
-                "location" to locationStatus
-            )
+        // Only update location-related fields, don't overwrite attendance data
+        val updates = mapOf(
+            "latitude" to location.latitude,
+            "longitude" to location.longitude,
+            "location" to locationStatus
         )
-    }
 
+        FirebaseDatabase.getInstance().getReference("attendance/$formattedDate/$uid")
+            .updateChildren(updates)
+            .addOnFailureListener { e ->
+                Log.e("LocationService", "Failed to update location: ${e.message}")
+            }
+    }
     private fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
         val result = FloatArray(1)
         Location.distanceBetween(lat1, lon1, lat2, lon2, result)
