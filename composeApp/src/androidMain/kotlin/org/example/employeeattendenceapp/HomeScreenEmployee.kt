@@ -452,6 +452,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         if (uid.isNotEmpty() && internetConnected) {
             // Only update if this is a user-initiated action, not background data
             if (checkInTime != "Background Update" &&
+                checkInTime != null &&  // ← Add this check
                 workingHours != "Background Update" &&
                 attendanceStatus != "Background Update") {
 
@@ -459,11 +460,12 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     "name" to userName,
                     "date" to formattedDate,
                     "day" to formattedDay,
+                    "checkInTime" to checkInTime,  // ← This will now have the actual time
                     "workingHours" to workingHours,
                     "attendance" to attendanceStatus,
                     "status" to statusText,
-                    "lastUpdated" to System.currentTimeMillis(), // Add timestamp
-                    "updateSource" to "foreground" // Identify the source
+                    "lastUpdated" to System.currentTimeMillis(),
+                    "updateSource" to "foreground"
                 )
 
                 FirebaseDatabase.getInstance().getReference("attendance/$formattedDate/$uid")
@@ -603,7 +605,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                                 day = formattedDay,
                                                 latitude = latitude,
                                                 longitude = longitude,
-                                                checkInTime = "Not Marked",
+                                                checkInTime = checkInTime ?: "Not Marked",
                                                 workingHours = "0h 0m 0s",
                                                 attendance = "Absent",
                                                 status = "--"
