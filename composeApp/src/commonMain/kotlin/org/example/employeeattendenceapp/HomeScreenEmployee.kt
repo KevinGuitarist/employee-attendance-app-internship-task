@@ -64,22 +64,38 @@ class EmployeeAttendanceState {
     fun updateWorkingHours(currentTime: LocalTime, isInOfficeZone: Boolean) {
         val checkIn = _checkInTimeStamp.value
         if (checkIn != null) {
-            val officeStartTime = LocalTime.of(9, 0)
-            val officeEndTime = LocalTime.of(22, 0)
+            val officeStartTime = LocalTime.of(22, 0)  // 10 PM
+            val officeEndTime = LocalTime.of(4, 0)     // 4 AM
             val now = currentTime
-            val boundedNow = if (now.isAfter(officeEndTime)) officeEndTime else if (now.isBefore(officeStartTime)) officeStartTime else now
+
+            // CORRECT bounded time calculation for overnight
+            val boundedNow = if (officeStartTime.isAfter(officeEndTime)) {
+                when {
+                    now.isAfter(officeStartTime) || now.isBefore(officeEndTime) -> now
+                    else -> officeEndTime
+                }
+            } else {
+                if (now.isAfter(officeEndTime)) officeEndTime else if (now.isBefore(officeStartTime)) officeStartTime else now
+            }
 
             // Detect transition: out-of-zone -> in-zone
             if (isInOfficeZone && !wasInOfficeZone) {
-                // Just entered zone, start timing from now
                 lastZoneEntryTime = boundedNow
             }
+
             // Detect transition: in-zone -> out-of-zone
             if (!isInOfficeZone && wasInOfficeZone) {
-                // Just left zone, accumulate time
                 if (lastZoneEntryTime != null) {
                     val entry = lastZoneEntryTime!!
-                    if (!entry.isBefore(officeStartTime) && !entry.isAfter(officeEndTime)) {
+
+                    // CORRECT boundary check for overnight
+                    val isWithinOfficeHours = if (officeStartTime.isAfter(officeEndTime)) {
+                        entry.isAfter(officeStartTime) || entry.isBefore(officeEndTime)
+                    } else {
+                        !entry.isBefore(officeStartTime) && !entry.isAfter(officeEndTime)
+                    }
+
+                    if (isWithinOfficeHours) {
                         val duration = Duration.between(entry, boundedNow)
                         if (!duration.isNegative && !duration.isZero) {
                             totalWorkingDuration = totalWorkingDuration.plus(duration)
