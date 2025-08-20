@@ -157,13 +157,11 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         })
 
         // Get today's attendance and recent records
-// In HomeScreenAdmin.kt, modify the attendanceRef.addValueEventListener part:
 
         attendanceRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
                     val presentEmployees = mutableSetOf<String>()
-                    val absentNotMarkedEmployees = mutableSetOf<String>()
                     val tempRecentAttendance = mutableListOf<Triple<String, String, String>>()
 
                     if (snapshot.exists()) {
@@ -187,15 +185,13 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
 
                             if (effectiveAttendance == "Present") {
                                 presentEmployees.add(userId)
-                            } else {
-                                absentNotMarkedEmployees.add(userId)
                             }
 
                             val displayName = name.substringBefore("@")
                                 .replace(".", " ")
                                 .replaceFirstChar { it.uppercase() }
 
-                            val displayStatus = if (effectiveAttendance == "Present") "Present" else "Absent/Not Marked"
+                            val displayStatus = if (effectiveAttendance == "Present") "Present" else "Absent"
                             val displayTime = if (effectiveAttendance == "Present") effectiveCheckInTime else "Not checked in"
 
                             tempRecentAttendance.add(Triple(
@@ -210,8 +206,8 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     }
 
                     presentCount = presentEmployees.size
-                    absentCount = absentNotMarkedEmployees.size
-                    notMarkedCount = absentNotMarkedEmployees.size
+                    absentCount = totalEmployees - presentCount // Absent = Total - Present
+                    notMarkedCount = absentCount // Not marked = Absent (they are the same)
                     recentAttendanceList = tempRecentAttendance.takeLast(4)
                 } catch (e: Exception) {
                     Log.e("Attendance", "Error processing attendance", e)
@@ -227,8 +223,9 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     snackbarHostState.showSnackbar("Database error: ${error.message}")
                 }
             }
-        })}
-    if (justLoggedIn) {
+        })
+    }
+        if (justLoggedIn) {
         LaunchedEffect(Unit) {
             delay(300)
             snackbarHostState.showSnackbar("Logged in successfully!")
