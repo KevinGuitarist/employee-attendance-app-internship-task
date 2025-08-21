@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import android.provider.Settings
 import android.util.Log
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
@@ -51,6 +52,7 @@ import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.example.employeeattendenceapp.Auth.clearUserRole
@@ -272,6 +274,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     // State to track if internet connectivity is available
     var internetConnected by remember { mutableStateOf(true) }
 
+    LaunchedEffect(internetConnected) {
+        attendanceState.setInternetConnected(internetConnected)
+    }
+
+
     // Helper to check if location services are enabled
     fun isLocationEnabled(context: Context): Boolean {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -323,10 +330,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
             override fun onLost(network: Network) {
                 internetConnected = false
             }
-
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                internetConnected = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            }
         }
 
         val networkRequest = NetworkRequest.Builder()
@@ -345,11 +348,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     // Clear location if services are off
     LaunchedEffect(locationServicesEnabled) {
-        if (!locationServicesEnabled) {
-            latitude = null
-            longitude = null
-            locationError = "Location services disabled"
-        }
+        attendanceState.setLocationEnabled(locationServicesEnabled)
     }
 
     // Clear location if internet is off
@@ -379,8 +378,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     }
 
     // Office hours and location
-    val officeStartTime = LocalTime.of(22, 0)
-    val officeEndTime = LocalTime.of(9, 0)
+    val officeStartTime = LocalTime.of(9, 0)
+    val officeEndTime = LocalTime.of(18, 0)
     val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) || now.isBefore(officeEndTime.plusNanos(1))
     val officeLat = 29.275748
     val officeLon = 79.545030
@@ -413,9 +412,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     }
 
     // Update working hours
-    LaunchedEffect(now, isInOfficeZone) {
+    LaunchedEffect(now) {
         attendanceState.updateWorkingHours(now, isInOfficeZone)
     }
+
 
     // Real-time status update
     LaunchedEffect(isInOfficeZone, isOfficeTime, internetConnected, locationServicesEnabled) {
@@ -430,7 +430,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                 attendanceState.setStatusAbsent()
                 attendanceState.setStatusDash()
             }
-            isInOfficeZone && isOfficeTime -> attendanceState.setStatusActive()  // BOTH conditions
+            isInOfficeZone && isOfficeTime -> attendanceState.setStatusActive()
             else -> attendanceState.setStatusDash()
         }
     }
@@ -444,15 +444,18 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val dayFormatter = DateTimeFormatter.ofPattern("EEEE")
     val formattedDate = currentDate.format(dateFormatter)
     val formattedDay = currentDate.format(dayFormatter)
+    val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.US)
 
     LaunchedEffect(
         userName, formattedDate, formattedDay, checkInTime,
         workingHours, attendanceStatus, statusText
     ) {
         if (uid.isNotEmpty() && internetConnected) {
+            // Convert LocalTime to String for Firebase
+            val checkInTimeString = checkInTime?.format(timeFormatter) ?: "Not Marked"
+
             // Only update if this is a user-initiated action, not background data
-            if (checkInTime != "Background Update" &&
-                checkInTime != null &&  // ← Add this check
+            if (checkInTimeString != "Background Update" &&
                 workingHours != "Background Update" &&
                 attendanceStatus != "Background Update") {
 
@@ -460,7 +463,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     "name" to userName,
                     "date" to formattedDate,
                     "day" to formattedDay,
-                    "checkInTime" to checkInTime,  // ← This will now have the actual time
+                    "checkInTime" to checkInTimeString,  // Use the formatted string
                     "workingHours" to workingHours,
                     "attendance" to attendanceStatus,
                     "status" to statusText,
@@ -585,13 +588,16 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     return@launch
                                 }
 
+                                // Convert LocalTime to String for Firebase
+                                val checkInTimeString = checkInTime?.format(timeFormatter) ?: "Not Marked"
+
                                 // Save to daily_records with proper callback handling
                                 org.example.employeeattendenceapp.Auth.saveDailyRecord(
                                     uid = uid,
                                     name = userName,
                                     date = formattedDate,
                                     day = formattedDay,
-                                    checkInTime = checkInTime ?: "Not Marked",
+                                    checkInTime = checkInTimeString,
                                     workingHours = workingHours,
                                     attendance = attendanceStatus,
                                     status = statusText,
@@ -605,7 +611,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                                 day = formattedDay,
                                                 latitude = latitude,
                                                 longitude = longitude,
-                                                checkInTime = checkInTime ?: "Not Marked",
+                                                checkInTime = checkInTimeString,
                                                 workingHours = "0h 0m 0s",
                                                 attendance = "Absent",
                                                 status = "--"
@@ -627,8 +633,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 snackbarHostState.showSnackbar("Sign-off failed: ${e.localizedMessage}")
                                 Log.e("SignOff", "Error during sign-off", e)
                             }
-                        } },
-                    withinZoneVisible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected
+                        }
+                    },
+                    withinZoneVisible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected,
+                    locationServicesEnabled = locationServicesEnabled  // ADD THIS LINE
                 )
 
                 // Today's Stats Card
@@ -761,12 +769,61 @@ private fun LocationCard(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
+            // Status indicators row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Internet status
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(
+                            id = if (internetConnected) R.drawable.ic_wifi_on
+                            else R.drawable.ic_wifi_off
+                        ),
+                        contentDescription = "Internet Status",
+                        tint = if (internetConnected) Color(0xFF4CAF50) else Color(0xFFF44336),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (internetConnected) "Online" else "Offline",
+                        color = if (internetConnected) Color(0xFF4CAF50) else Color(0xFFF44336),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Location services status
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(
+                            id = if (locationServicesEnabled) R.drawable.ic_location_on
+                            else R.drawable.ic_location_off
+                        ),
+                        contentDescription = "Location Status",
+                        tint = if (locationServicesEnabled) Color(0xFF4CAF50) else Color(0xFFF44336),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (locationServicesEnabled) "Location On" else "Location Off",
+                        color = if (locationServicesEnabled) Color(0xFF4CAF50) else Color(0xFFF44336),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
             Text(
                 text = "Current Location",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 2.dp, top = 2.dp)
             )
+
             Spacer(modifier = Modifier.height(14.dp))
             when {
                 !internetConnected -> LocationStatusText("No internet connection", Color.Red)
@@ -818,8 +875,14 @@ private fun MarkAttendanceCard(
     attendanceMarkedTime: String?,
     onMarkAttendance: () -> Unit,
     onSignOff: () -> Unit,
-    withinZoneVisible: Boolean
+    withinZoneVisible: Boolean,
+    locationServicesEnabled: Boolean
 ) {
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    var isSignedOff by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -827,18 +890,30 @@ private fun MarkAttendanceCard(
             .shadow(1.dp, RoundedCornerShape(12.dp)),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        var isSignedOff by remember { mutableStateOf(false) }
-
         Column {
             // Mark Attendance Button
             Button(
                 onClick = {
                     if (!internetConnected) {
-                        // Show snackbar handled in parent
+                        // Show snackbar for no internet
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("No internet connection")
+                        }
+                    } else if (!locationServicesEnabled) {
+                        // Show snackbar for location disabled
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Location services disabled")
+                        }
                     } else if (!isOfficeTime) {
-                        // Show snackbar handled in parent
+                        // Show snackbar for outside office hours
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Outside office hours")
+                        }
                     } else if (!isInOfficeZone) {
-                        // Show snackbar handled in parent
+                        // Show snackbar for outside office zone
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Not in office zone")
+                        }
                     } else {
                         onMarkAttendance()
                     }
@@ -847,12 +922,15 @@ private fun MarkAttendanceCard(
                     .fillMaxWidth()
                     .alpha(if (isOfficeTime && !isSignedOff) 1f else 0.5f),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isInOfficeZone && internetConnected) Color(0xFF4B89DC) else Color(0xFFBDBDBD)
+                    containerColor = if (isInOfficeZone && internetConnected && locationServicesEnabled)
+                        Color(0xFF4B89DC) else Color(0xFFBDBDBD)
                 ),
                 enabled = !isSignedOff &&
                         isOfficeTime &&
                         !isAttendanceMarkedToday &&
-                        internetConnected,
+                        internetConnected &&
+                        locationServicesEnabled &&
+                        isInOfficeZone,  // Add location zone check
                 shape = RoundedCornerShape(8.dp)
             ) {
                 if (isNearOfficeZone) {
@@ -914,15 +992,27 @@ private fun MarkAttendanceCard(
             }
         }
     }
+
+    // Snackbar host for this card
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        SnackbarHost(hostState = snackbarHostState)
+    }
 }
 
 @Composable
 private fun TodaysStatsCard(
-    checkInTime: String?,
+    checkInTime: LocalTime?,
     workingHours: String,
     attendanceStatus: String,
     statusText: String
 ) {
+    // Add formatter here
+    val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.US)
+    val checkInTimeDisplay = checkInTime?.format(timeFormatter) ?: "Not marked"
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -944,7 +1034,7 @@ private fun TodaysStatsCard(
                 modifier = Modifier.align(Alignment.Start)
             )
             Spacer(modifier = Modifier.height(28.dp))
-            StatRow("Check-in time", checkInTime ?: "Not marked", checkInTime != null)
+            StatRow("Check-in time", checkInTimeDisplay, checkInTime != null)  // Use formatted display
             Spacer(modifier = Modifier.height(6.dp))
             StatRow("Working hours", workingHours, workingHours != "0h 0m 0s")
             Spacer(modifier = Modifier.height(6.dp))
@@ -1007,4 +1097,15 @@ private fun PermissionRationaleDialog(
             }
         }
     )
+}
+
+private fun isInternetConnected(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork
+    val capabilities = connectivityManager.getNetworkCapabilities(network)
+    return capabilities != null && (
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            )
 }

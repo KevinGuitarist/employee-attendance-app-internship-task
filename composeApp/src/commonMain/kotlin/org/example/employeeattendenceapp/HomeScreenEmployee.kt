@@ -19,8 +19,8 @@ class EmployeeAttendanceState {
     val withinZoneVisible: StateFlow<Boolean> = _withinZoneVisible
 
     // New properties for attendance tracking
-    private val _checkInTime = MutableStateFlow<String?>(null)
-    val checkInTime: StateFlow<String?> = _checkInTime
+    private val _checkInTime = MutableStateFlow<LocalTime?>(null)
+    val checkInTime: StateFlow<LocalTime?> = _checkInTime
 
     private val _attendanceStatus = MutableStateFlow<String>("Absent")
     val attendanceStatus: StateFlow<String> = _attendanceStatus
@@ -43,83 +43,73 @@ class EmployeeAttendanceState {
     private var lastZoneEntryTime: LocalTime? = null
     private var wasInOfficeZone: Boolean = false
 
-    fun markAttendance() {
-        val currentTime = LocalTime.now()
-        val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a")
-        val formattedTime = currentTime.format(timeFormatter)
-        
-        _checkInTime.value = formattedTime
-        _checkInTimeStamp.value = currentTime
-        _attendanceStatus.value = "Present"
-        _attendanceMarkedTime.value = formattedTime
-        _markAttendanceEnabled.value = false
-        _withinZoneVisible.value = false
-        _lastAttendanceDate.value = LocalDate.now()
-        // Reset accumulators
-        totalWorkingDuration = Duration.ZERO
-        lastZoneEntryTime = null
-        wasInOfficeZone = false
+    private val _isInternetConnected = MutableStateFlow(true)
+    private val _lastWorkingTime = MutableStateFlow<LocalTime?>(null)
+    private val _totalPausedDuration = MutableStateFlow(Duration.ZERO)
+
+    private val _isLocationEnabled = MutableStateFlow(true)
+    private val _lastLocationTime = MutableStateFlow<LocalTime?>(null)
+    private val _totalLocationPausedDuration = MutableStateFlow(Duration.ZERO)
+
+    fun setLocationEnabled(enabled: Boolean) {
+        val wasEnabled = _isLocationEnabled.value
+        _isLocationEnabled.value = enabled
+
+        if (wasEnabled && !enabled) {
+            // Location just went offline - pause counter
+            _lastLocationTime.value = LocalTime.now()
+        } else if (!wasEnabled && enabled) {
+            // Location just came back online - resume counter
+            _lastLocationTime.value?.let { lastTime ->
+                val pauseDuration = Duration.between(lastTime, LocalTime.now())
+                _totalLocationPausedDuration.value = _totalLocationPausedDuration.value.plus(pauseDuration)
+                _lastLocationTime.value = null
+            }
+        }
     }
 
-    fun updateWorkingHours(currentTime: LocalTime, isInOfficeZone: Boolean) {
-        val checkIn = _checkInTimeStamp.value
-        if (checkIn != null) {
-            val officeStartTime = LocalTime.of(22, 0)  // 10 PM
-            val officeEndTime = LocalTime.of(4, 0)     // 4 AM
-            val now = currentTime
+    // handle internet connectivity changes
+    fun setInternetConnected(connected: Boolean) {
+        val wasConnected = _isInternetConnected.value
+        _isInternetConnected.value = connected
 
-            // CORRECT bounded time calculation for overnight
-            val boundedNow = if (officeStartTime.isAfter(officeEndTime)) {
-                when {
-                    now.isAfter(officeStartTime) || now.isBefore(officeEndTime) -> now
-                    else -> officeEndTime
-                }
-            } else {
-                if (now.isAfter(officeEndTime)) officeEndTime else if (now.isBefore(officeStartTime)) officeStartTime else now
+        if (wasConnected && !connected) {
+            // Internet just went offline - pause counter
+            _lastWorkingTime.value = LocalTime.now()
+        } else if (!wasConnected && connected) {
+            // Internet just came back online - resume counter
+            _lastWorkingTime.value?.let { lastTime ->
+                val pauseDuration = Duration.between(lastTime, LocalTime.now())
+                _totalPausedDuration.value = _totalPausedDuration.value.plus(pauseDuration)
+                _lastWorkingTime.value = null
             }
+        }
+    }
 
-            // Detect transition: out-of-zone -> in-zone
-            if (isInOfficeZone && !wasInOfficeZone) {
-                lastZoneEntryTime = boundedNow
-            }
+    fun markAttendance() {
+        _checkInTime.value = LocalTime.now()
+        _attendanceStatus.value = "Present"
+        _lastAttendanceDate.value = LocalDate.now()
+        _attendanceMarkedTime.value = LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale.US))
+    }
 
-            // Detect transition: in-zone -> out-of-zone
-            if (!isInOfficeZone && wasInOfficeZone) {
-                if (lastZoneEntryTime != null) {
-                    val entry = lastZoneEntryTime!!
+    suspend fun updateWorkingHours(currentTime: LocalTime, isInOfficeZone: Boolean) {
+        if (isAttendanceMarkedToday() && _isInternetConnected.value && _isLocationEnabled.value) {
+            val checkIn = _checkInTime.value ?: return
 
-                    // CORRECT boundary check for overnight
-                    val isWithinOfficeHours = if (officeStartTime.isAfter(officeEndTime)) {
-                        entry.isAfter(officeStartTime) || entry.isBefore(officeEndTime)
-                    } else {
-                        !entry.isBefore(officeStartTime) && !entry.isAfter(officeEndTime)
-                    }
+            // Calculate total elapsed time since check-in
+            val totalElapsedDuration = Duration.between(checkIn, currentTime)
 
-                    if (isWithinOfficeHours) {
-                        val duration = Duration.between(entry, boundedNow)
-                        if (!duration.isNegative && !duration.isZero) {
-                            totalWorkingDuration = totalWorkingDuration.plus(duration)
-                        }
-                    }
-                }
-                lastZoneEntryTime = null
-            }
-            // Display logic
-            val displayDuration = if (isInOfficeZone && lastZoneEntryTime != null) {
-                val duration = Duration.between(lastZoneEntryTime, boundedNow)
-                if (!duration.isNegative && !duration.isZero) {
-                    totalWorkingDuration.plus(duration)
-                } else {
-                    totalWorkingDuration
-                }
-            } else {
-                totalWorkingDuration
-            }
-            val hours = displayDuration.toHours()
-            val minutes = displayDuration.toMinutesPart()
-            val seconds = displayDuration.toSecondsPart()
+            // Subtract both internet and location paused durations
+            val actualWorkingDuration = totalElapsedDuration
+                .minus(_totalPausedDuration.value)
+                .minus(_totalLocationPausedDuration.value)
+
+            val hours = actualWorkingDuration.toHours()
+            val minutes = actualWorkingDuration.toMinutes() % 60
+            val seconds = actualWorkingDuration.seconds % 60
+
             _workingHours.value = "${hours}h ${minutes}m ${seconds}s"
-            wasInOfficeZone = isInOfficeZone
         }
     }
 
@@ -128,17 +118,14 @@ class EmployeeAttendanceState {
     }
 
     fun setStatusActive() {
-        // Remove the attendance check - we want to show Active status whenever in zone
         _statusText.value = "Active"
     }
 
     fun setStatusDash() {
-        // Remove the attendance check - we want to show -- status whenever out of zone
         _statusText.value = "--"
     }
 
     fun setStatusAbsent() {
-        // Only set to Absent if attendance hasn't been marked today
         if (_lastAttendanceDate.value != LocalDate.now()) {
             _attendanceStatus.value = "Absent"
         }
@@ -146,7 +133,6 @@ class EmployeeAttendanceState {
 
     fun setStatusPresent() {
         _attendanceStatus.value = "Present"
-        // Don't change statusText here - keep it as Active or --
     }
 
     fun isAttendanceMarkedToday(): Boolean {
@@ -166,6 +152,11 @@ class EmployeeAttendanceState {
         totalWorkingDuration = Duration.ZERO
         lastZoneEntryTime = null
         wasInOfficeZone = false
+        _totalPausedDuration.value = Duration.ZERO
+        _lastWorkingTime.value = null
+        _totalLocationPausedDuration.value = Duration.ZERO
+        _lastLocationTime.value = null
+        _isLocationEnabled.value = true
     }
 }
 
