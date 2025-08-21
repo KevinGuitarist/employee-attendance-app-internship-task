@@ -118,8 +118,6 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         })
     }
 
-
-    // Fetch attendance data from Firebase
     // Fetch attendance data from Firebase
     LaunchedEffect(Unit) {
         val usersRef = database.child("users")
