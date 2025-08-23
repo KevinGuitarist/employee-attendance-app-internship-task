@@ -59,6 +59,7 @@ import org.example.employeeattendenceapp.Auth.clearUserRole
 import org.example.employeeattendenceapp.Auth.signOut
 import org.example.employeeattendenceapp.ui.employee.TaskEmployeeViewModel
 import org.example.employeeattendenceapp.ui.employee.components.EmployeeTaskView
+import org.example.employeeattendenceapp.viewmodels.EmployeeAttendanceViewModel
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -70,6 +71,18 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    // Use ViewModel instead of local state
+    val attendanceViewModel: EmployeeAttendanceViewModel = hiltViewModel()
+
+    // Collect state from ViewModel
+    val statusText by attendanceViewModel.statusText.collectAsState()
+    val withinZoneVisible by attendanceViewModel.withinZoneVisible.collectAsState()
+    val checkInTime by attendanceViewModel.checkInTime.collectAsState()
+    val attendanceStatus by attendanceViewModel.attendanceStatus.collectAsState()
+    val workingHours by attendanceViewModel.workingHours.collectAsState()
+    val isAttendanceMarkedToday by attendanceViewModel.attendanceMarked.collectAsState()
+    val attendanceMarkedTime by attendanceViewModel.attendanceMarkedTime.collectAsState()
 
     // Request location permission
     val locationPermissionState = rememberPermissionState(
@@ -205,11 +218,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     // Use business logic state from commonMain
     val attendanceState = remember { EmployeeAttendanceState() }
-    val statusText by attendanceState.statusText.collectAsState(initial = "Active")
-    val withinZoneVisible by attendanceState.withinZoneVisible.collectAsState(initial = true)
-    val checkInTime by attendanceState.checkInTime.collectAsState(initial = null)
-    val attendanceStatus by attendanceState.attendanceStatus.collectAsState(initial = "Absent")
-    val workingHours by attendanceState.workingHours.collectAsState(initial = "0h 0m 0s")
 
     // Location state
     var latitude by remember { mutableStateOf<Double?>(null) }
@@ -401,37 +409,35 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
 
     // Track the last day when attendance was marked
-    var lastAttendanceDay by remember { mutableStateOf(LocalDate.now()) }
+    val lastAttendanceDay by attendanceViewModel.lastAttendanceDay.collectAsState()
 
     LaunchedEffect(now) {
         val today = LocalDate.now()
         if (today != lastAttendanceDay) {
-            attendanceState.resetForNewDay()
-            lastAttendanceDay = today
+            attendanceViewModel.resetForNewDay()
         }
     }
 
     // Update working hours
     LaunchedEffect(now) {
-        attendanceState.updateWorkingHours(now, isInOfficeZone)
+        attendanceViewModel.updateWorkingHours(now, isInOfficeZone)
     }
-
 
     // Real-time status update
     LaunchedEffect(isInOfficeZone, isOfficeTime, internetConnected, locationServicesEnabled) {
         when {
-            !internetConnected -> attendanceState.setStatusDash()
-            !locationServicesEnabled -> attendanceState.setStatusDash()
-            attendanceState.isAttendanceMarkedToday() -> {
-                attendanceState.setStatusPresent()
-                if (isInOfficeZone && isOfficeTime) attendanceState.setStatusActive() else attendanceState.setStatusDash()
+            !internetConnected -> attendanceViewModel.setStatusDash()
+            !locationServicesEnabled -> attendanceViewModel.setStatusDash()
+            attendanceViewModel.isAttendanceMarkedToday() -> {
+                attendanceViewModel.setStatusPresent()
+                if (isInOfficeZone && isOfficeTime) attendanceViewModel.setStatusActive() else attendanceViewModel.setStatusDash()
             }
             !isOfficeTime -> {
-                attendanceState.setStatusAbsent()
-                attendanceState.setStatusDash()
+                attendanceViewModel.setStatusAbsent()
+                attendanceViewModel.setStatusDash()
             }
-            isInOfficeZone && isOfficeTime -> attendanceState.setStatusActive()
-            else -> attendanceState.setStatusDash()
+            isInOfficeZone && isOfficeTime -> attendanceViewModel.setStatusActive()
+            else -> attendanceViewModel.setStatusDash()
         }
     }
 
@@ -564,15 +570,18 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     isOfficeTime = isOfficeTime,
                     isInOfficeZone = isInOfficeZone,
                     isNearOfficeZone = isNearOfficeZone,
-                    isAttendanceMarkedToday = attendanceState.isAttendanceMarkedToday(),
-                    attendanceMarkedTime = attendanceState.attendanceMarkedTime.value,
+                    isAttendanceMarkedToday = isAttendanceMarkedToday,
+                    attendanceMarkedTime = attendanceMarkedTime?.let { time ->
+                        time.format(timeFormatter) // Use the existing formatter
+                    },
                     onMarkAttendance = {
                         try {
-                            attendanceState.markAttendance()
+                            attendanceViewModel.markAttendance()
                             coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Marked at ${attendanceState.attendanceMarkedTime.value}")
+                                val formattedTime = attendanceMarkedTime?.format(timeFormatter)
+                                snackbarHostState.showSnackbar("Marked at ${formattedTime ?: "unknown time"}")
                                 delay(3000)
-                                attendanceState.resetZoneVisibility()
+                                attendanceViewModel.resetZoneVisibility()
                             }
                         } catch (e: Exception) {
                             coroutineScope.launch {
@@ -588,8 +597,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     return@launch
                                 }
 
-                                // Convert LocalTime to String for Firebase
-                                val checkInTimeString = checkInTime?.format(timeFormatter) ?: "Not Marked"
+                                // Convert LocalTime to formatted String for Firebase
+                                val checkInTimeString = checkInTime?.let { time ->
+                                    val formatter = java.time.format.DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale.US)
+                                    time.format(formatter)
+                                } ?: "Not Marked"
 
                                 // Save to daily_records with proper callback handling
                                 org.example.employeeattendenceapp.Auth.saveDailyRecord(
@@ -597,7 +609,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     name = userName,
                                     date = formattedDate,
                                     day = formattedDay,
-                                    checkInTime = checkInTimeString,
+                                    checkInTime = checkInTimeString,  // Use formatted string
                                     workingHours = workingHours,
                                     attendance = attendanceStatus,
                                     status = statusText,
@@ -611,14 +623,14 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                                 day = formattedDay,
                                                 latitude = latitude,
                                                 longitude = longitude,
-                                                checkInTime = checkInTimeString,
+                                                checkInTime = checkInTimeString,  // Use formatted string
                                                 workingHours = "0h 0m 0s",
                                                 attendance = "Absent",
                                                 status = "--"
                                             )
 
-                                            // Reset the local state
-                                            attendanceState.resetForNewDay()
+                                            // Reset the ViewModel state
+                                            attendanceViewModel.resetForNewDay()
                                             snackbarHostState.showSnackbar("Signed off successfully! Data saved.")
                                         }
                                     },
@@ -636,12 +648,12 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         }
                     },
                     withinZoneVisible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected,
-                    locationServicesEnabled = locationServicesEnabled  // ADD THIS LINE
+                    locationServicesEnabled = locationServicesEnabled
                 )
 
                 // Today's Stats Card
                 TodaysStatsCard(
-                    checkInTime = checkInTime,
+                    checkInTime = checkInTime?.format(timeFormatter) ?: "Not marked", // Pass formatted string
                     workingHours = workingHours,
                     attendanceStatus = attendanceStatus,
                     statusText = statusText
@@ -930,7 +942,7 @@ private fun MarkAttendanceCard(
                         !isAttendanceMarkedToday &&
                         internetConnected &&
                         locationServicesEnabled &&
-                        isInOfficeZone,  // Add location zone check
+                        isInOfficeZone,
                 shape = RoundedCornerShape(8.dp)
             ) {
                 if (isNearOfficeZone) {
@@ -1004,15 +1016,11 @@ private fun MarkAttendanceCard(
 
 @Composable
 private fun TodaysStatsCard(
-    checkInTime: LocalTime?,
+    checkInTime: String,
     workingHours: String,
     attendanceStatus: String,
     statusText: String
 ) {
-    // Add formatter here
-    val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.US)
-    val checkInTimeDisplay = checkInTime?.format(timeFormatter) ?: "Not marked"
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1034,7 +1042,7 @@ private fun TodaysStatsCard(
                 modifier = Modifier.align(Alignment.Start)
             )
             Spacer(modifier = Modifier.height(28.dp))
-            StatRow("Check-in time", checkInTimeDisplay, checkInTime != null)  // Use formatted display
+            StatRow("Check-in time", checkInTime, checkInTime != "Not marked")
             Spacer(modifier = Modifier.height(6.dp))
             StatRow("Working hours", workingHours, workingHours != "0h 0m 0s")
             Spacer(modifier = Modifier.height(6.dp))
@@ -1097,15 +1105,4 @@ private fun PermissionRationaleDialog(
             }
         }
     )
-}
-
-private fun isInternetConnected(context: Context): Boolean {
-    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    val network = connectivityManager.activeNetwork
-    val capabilities = connectivityManager.getNetworkCapabilities(network)
-    return capabilities != null && (
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-            )
 }
