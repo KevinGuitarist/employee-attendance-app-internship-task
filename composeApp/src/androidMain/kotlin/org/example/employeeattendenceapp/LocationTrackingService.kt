@@ -1,43 +1,28 @@
 package org.example.employeeattendenceapp
 
-import android.Manifest
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
+import android.app.*
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.location.Location
-import android.os.Build
-import android.os.IBinder
-import android.os.Looper
+import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 
 class LocationTrackingService : Service() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
+    private lateinit var notificationManager: NotificationManager
 
     companion object {
-        const val CHANNEL_ID = "LocationTrackingChannel"
-        const val NOTIFICATION_ID = 123
+        private const val NOTIFICATION_CHANNEL_ID = "location_tracking_channel"
+        private const val NOTIFICATION_ID = 1235
 
         fun startService(context: Context) {
             val intent = Intent(context, LocationTrackingService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (hasRequiredPermissions(context)) {
-                    context.startForegroundService(intent)
-                }
+                context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
@@ -47,93 +32,75 @@ class LocationTrackingService : Service() {
             val intent = Intent(context, LocationTrackingService::class.java)
             context.stopService(intent)
         }
-
-        private fun hasRequiredPermissions(context: Context): Boolean {
-            return ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        }
     }
 
     override fun onCreate() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        createLocationCallback()
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (hasRequiredPermissions()) {
-            startForegroundServiceWithLocation()
-        } else {
-            stopSelf()
-        }
+        startForegroundService()
+        startLocationUpdates()
         return START_STICKY
     }
 
-    private fun hasRequiredPermissions(): Boolean {
-        return ContextCompat.checkSelfPermission(
+    private fun startForegroundService() {
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
             this,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+            0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
+        )
 
-    private fun startForegroundServiceWithLocation() {
-        val notification = createNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
-        requestLocationUpdates()
+        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("Attendance Location Tracking")
+            .setContentText("Tracking your location for attendance verification")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .build()
+
+        startForeground(NOTIFICATION_ID, notification)
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel(
-                CHANNEL_ID,
-                "Location Tracking Service",
-                NotificationManager.IMPORTANCE_LOW
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Location Tracking",
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Tracks employee location for attendance"
+                description = "Channel for location tracking service"
+                setShowBadge(false)
             }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(serviceChannel)
+            notificationManager.createNotificationChannel(channel)
         }
     }
 
-    private fun createNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Employee Attendance")
-            .setContentText("Tracking your location for attendance")
-            .setSmallIcon(R.drawable.ic_notification)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-    }
+    private fun startLocationUpdates() {
+        val locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            10000
+        ).apply {
+            setMinUpdateIntervalMillis(5000)
+            setWaitForAccurateLocation(true)
+        }.build()
 
-    private fun createLocationCallback() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.lastLocation?.let {
-                    updateFirebase(it)
+                super.onLocationResult(locationResult)
+                val location = locationResult.lastLocation
+                location?.let {
+                    // Handle location updates here
+                    // You can broadcast this or store it somewhere
+                    Log.d("LocationTracking", "Lat: ${it.latitude}, Lon: ${it.longitude}")
                 }
             }
         }
-    }
-
-    private fun requestLocationUpdates() {
-        val locationRequest = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            1000
-        ).apply {
-            setMinUpdateIntervalMillis(500)
-            setMaxUpdateDelayMillis(1500)
-        }.build()
 
         try {
             fusedLocationClient.requestLocationUpdates(
@@ -142,44 +109,8 @@ class LocationTrackingService : Service() {
                 Looper.getMainLooper()
             )
         } catch (e: SecurityException) {
-            stopSelf()
+            Log.e("LocationTracking", "Location permission not granted", e)
         }
-    }
-
-    private fun updateFirebase(location: Location) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val currentDate = LocalDate.now()
-        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        val formattedDate = currentDate.format(dateFormatter)
-
-        val officeLat = 28.556199
-        val officeLon = 77.442415
-        val isInOfficeZone = distanceBetween(
-            location.latitude,
-            location.longitude,
-            officeLat,
-            officeLon
-        ) <= 100
-
-        val locationStatus = if (isInOfficeZone) "In Office" else "Not in Office"
-
-        // Only update location-related fields, don't overwrite attendance data
-        val updates = mapOf(
-            "latitude" to location.latitude,
-            "longitude" to location.longitude,
-            "location" to locationStatus
-        )
-
-        FirebaseDatabase.getInstance().getReference("attendance/$formattedDate/$uid")
-            .updateChildren(updates)
-            .addOnFailureListener { e ->
-                Log.e("LocationService", "Failed to update location: ${e.message}")
-            }
-    }
-    private fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
-        val result = FloatArray(1)
-        Location.distanceBetween(lat1, lon1, lat2, lon2, result)
-        return result[0]
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -189,7 +120,7 @@ class LocationTrackingService : Service() {
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (e: Exception) {
-            // Ignore if updates were never requested
+            Log.e("LocationTracking", "Error removing location updates", e)
         }
     }
 }

@@ -57,6 +57,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.example.employeeattendenceapp.Auth.clearUserRole
 import org.example.employeeattendenceapp.Auth.signOut
+import org.example.employeeattendenceapp.service.AppBackgroundService
 import org.example.employeeattendenceapp.ui.employee.TaskEmployeeViewModel
 import org.example.employeeattendenceapp.ui.employee.components.EmployeeTaskView
 import org.example.employeeattendenceapp.viewmodels.EmployeeAttendanceViewModel
@@ -137,6 +138,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         } else {
             LocationTrackingService.startService(context)
         }
+    }
+
+    // Start background service when composable launches
+    LaunchedEffect(Unit) {
+        AppBackgroundService.startService(context)
     }
 
     // Check permissions when composable launches
@@ -549,6 +555,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     adminName = userName,
                     onLogout = {
                         LocationTrackingService.stopService(context)
+                        AppBackgroundService.stopService(context)
                         signOut()
                         clearUserRole(context)
                         if (context is Activity) {
