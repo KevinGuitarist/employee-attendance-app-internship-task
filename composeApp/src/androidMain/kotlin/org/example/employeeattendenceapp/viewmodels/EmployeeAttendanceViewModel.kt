@@ -31,21 +31,25 @@ class EmployeeAttendanceViewModel @Inject constructor() : ViewModel() {
     val lastAttendanceDay: StateFlow<LocalDate> = _lastAttendanceDay.asStateFlow()
 
     fun markAttendance() {
-        val now = LocalTime.now()
+        val currentTime = LocalTime.now()
+        _checkInTime.value = currentTime
         _attendanceMarked.value = true
-        _attendanceMarkedTime.value = now
-        _checkInTime.value = now
+        _attendanceMarkedTime.value = currentTime
         _attendanceStatus.value = "Present"
         _lastAttendanceDay.value = LocalDate.now()
+
+        // Initialize working hours immediately
+        _workingHours.value = "0h 0m 0s"
     }
 
     fun resetForNewDay() {
+        _checkInTime.value = null
         _attendanceMarked.value = false
         _attendanceMarkedTime.value = null
-        _checkInTime.value = null
         _attendanceStatus.value = "Absent"
         _workingHours.value = "0h 0m 0s"
-        _lastAttendanceDay.value = LocalDate.now()
+        _statusText.value = "--"
+        _withinZoneVisible.value = false
     }
 
     fun isAttendanceMarkedToday(): Boolean {
@@ -54,14 +58,26 @@ class EmployeeAttendanceViewModel @Inject constructor() : ViewModel() {
     }
 
     fun updateWorkingHours(currentTime: LocalTime, isInOfficeZone: Boolean) {
-        _checkInTime.value?.let { checkInTime ->
-            if (isInOfficeZone) {
-                val hours = currentTime.hour - checkInTime.hour
-                val minutes = currentTime.minute - checkInTime.minute
-                val seconds = currentTime.second - checkInTime.second
-                _workingHours.value = "${hours}h ${minutes}m ${seconds}s"
-            }
+        _workingHours.value = calculateWorkingHours(currentTime, isInOfficeZone)
+    }
+
+    private fun calculateWorkingHours(currentTime: LocalTime, isInOfficeZone: Boolean): String {
+        val checkIn = _checkInTime.value
+        if (checkIn == null || !_attendanceMarked.value) {
+            return "0h 0m 0s"
         }
+
+        // Ensure current time is after check-in time to avoid negative duration
+        if (currentTime.isBefore(checkIn)) {
+            return "0h 0m 0s"
+        }
+
+        val duration = java.time.Duration.between(checkIn, currentTime)
+        val hours = duration.toHours()
+        val minutes = duration.toMinutes() % 60
+        val seconds = duration.seconds % 60
+
+        return "${hours}h ${minutes}m ${seconds}s"
     }
 
     fun setStatusActive() { _statusText.value = "Active" }
@@ -71,4 +87,7 @@ class EmployeeAttendanceViewModel @Inject constructor() : ViewModel() {
     fun resetZoneVisibility() { _withinZoneVisible.value = false }
     fun setLocationEnabled(enabled: Boolean) { /* Handle location state */ }
     fun setInternetConnected(connected: Boolean) { /* Handle internet state */ }
+    fun setWorkingHours(hours: String) {
+        _workingHours.value = hours
+    }
 }

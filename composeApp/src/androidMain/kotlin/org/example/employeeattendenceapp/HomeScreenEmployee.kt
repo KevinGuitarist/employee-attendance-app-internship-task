@@ -420,7 +420,13 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     // Update working hours
     LaunchedEffect(now) {
-        attendanceViewModel.updateWorkingHours(now, isInOfficeZone)
+        val checkInTime = attendanceViewModel.checkInTime.value
+        if (checkInTime != null && now.isAfter(checkInTime)) {
+            attendanceViewModel.updateWorkingHours(now, isInOfficeZone)
+        } else {
+            // Reset to zero if timing is invalid
+            attendanceViewModel.setWorkingHours("0h 0m 0s")
+        }
     }
 
     // Real-time status update
