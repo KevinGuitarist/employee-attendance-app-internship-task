@@ -152,8 +152,8 @@ class LocationTrackingService : Service() {
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
         val formattedDate = currentDate.format(dateFormatter)
 
-        val officeLat = 29.275748
-        val officeLon = 79.545030
+        val officeLat = 28.556199
+        val officeLon = 77.442415
         val isInOfficeZone = distanceBetween(
             location.latitude,
             location.longitude,

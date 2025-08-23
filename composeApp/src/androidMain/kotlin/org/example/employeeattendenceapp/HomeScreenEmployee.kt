@@ -378,11 +378,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     }
 
     // Office hours and location
-    val officeStartTime = LocalTime.of(20, 0)
-    val officeEndTime = LocalTime.of(9, 0)
+    val officeStartTime = LocalTime.of(11, 0)
+    val officeEndTime = LocalTime.of(22, 0)
     val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) || now.isBefore(officeEndTime.plusNanos(1))
-    val officeLat = 29.275748
-    val officeLon = 79.545030
+    val officeLat = 28.556199
+    val officeLon = 77.442415
 
     // Helper to calculate distance between two lat/lon points
     fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
