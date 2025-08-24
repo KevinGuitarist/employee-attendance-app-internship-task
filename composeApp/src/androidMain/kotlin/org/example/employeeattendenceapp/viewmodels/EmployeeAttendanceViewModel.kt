@@ -20,6 +20,8 @@ class EmployeeAttendanceViewModel @Inject constructor() : ViewModel() {
     private val _attendanceStatus = MutableStateFlow("Absent")
     private val _workingHours = MutableStateFlow("0h 0m 0s")
     private val _lastAttendanceDay = MutableStateFlow(LocalDate.now())
+    private val _showSnackbar = MutableStateFlow(false)
+    private val _snackbarMessage = MutableStateFlow("")
 
     val attendanceMarked: StateFlow<Boolean> = _attendanceMarked.asStateFlow()
     val attendanceMarkedTime: StateFlow<LocalTime?> = _attendanceMarkedTime.asStateFlow()
@@ -29,6 +31,17 @@ class EmployeeAttendanceViewModel @Inject constructor() : ViewModel() {
     val attendanceStatus: StateFlow<String> = _attendanceStatus.asStateFlow()
     val workingHours: StateFlow<String> = _workingHours.asStateFlow()
     val lastAttendanceDay: StateFlow<LocalDate> = _lastAttendanceDay.asStateFlow()
+    val showSnackbar: StateFlow<Boolean> = _showSnackbar.asStateFlow()
+    val snackbarMessage: StateFlow<String> = _snackbarMessage.asStateFlow()
+
+    fun showSnackbar(message: String) {
+        _snackbarMessage.value = message
+        _showSnackbar.value = true
+    }
+
+    fun hideSnackbar() {
+        _showSnackbar.value = false
+    }
 
     fun markAttendance() {
         val currentTime = LocalTime.now()

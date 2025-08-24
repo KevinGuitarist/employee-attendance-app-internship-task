@@ -84,6 +84,16 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val workingHours by attendanceViewModel.workingHours.collectAsState()
     val isAttendanceMarkedToday by attendanceViewModel.attendanceMarked.collectAsState()
     val attendanceMarkedTime by attendanceViewModel.attendanceMarkedTime.collectAsState()
+    val showSnackbar by attendanceViewModel.showSnackbar.collectAsState()
+    val snackbarMessage by attendanceViewModel.snackbarMessage.collectAsState()
+
+    // Handle snackbar display
+    LaunchedEffect(showSnackbar) {
+        if (showSnackbar) {
+            snackbarHostState.showSnackbar(snackbarMessage)
+            attendanceViewModel.hideSnackbar()
+        }
+    }
 
     // Request location permission
     val locationPermissionState = rememberPermissionState(
@@ -378,7 +388,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     if (justLoggedIn) {
         LaunchedEffect(justLoggedIn) {
             delay(300)
-            snackbarHostState.showSnackbar("Logged in successfully!")
+            attendanceViewModel.showSnackbar("Logged in successfully!")
         }
     }
 
@@ -592,13 +602,13 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                             attendanceViewModel.markAttendance()
                             coroutineScope.launch {
                                 val formattedTime = attendanceMarkedTime?.format(timeFormatter)
-                                snackbarHostState.showSnackbar("Marked at ${formattedTime ?: "unknown time"}")
+                                attendanceViewModel.showSnackbar("Marked at ${formattedTime ?: "unknown time"}")
                                 delay(3000)
                                 attendanceViewModel.resetZoneVisibility()
                             }
                         } catch (e: Exception) {
                             coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Attendance failed: ${e.localizedMessage}")
+                                attendanceViewModel.showSnackbar("Attendance failed: ${e.localizedMessage}")
                             }
                         }
                     },
@@ -606,7 +616,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                         coroutineScope.launch {
                             try {
                                 if (uid.isEmpty()) {
-                                    snackbarHostState.showSnackbar("Error: User not authenticated")
+                                    attendanceViewModel.showSnackbar("Error: User not authenticated")
                                     return@launch
                                 }
 
@@ -616,18 +626,16 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     time.format(formatter)
                                 } ?: "Not Marked"
 
-                                // Save to daily_records with proper callback handling
                                 org.example.employeeattendenceapp.Auth.saveDailyRecord(
                                     uid = uid,
                                     name = userName,
                                     date = formattedDate,
                                     day = formattedDay,
-                                    checkInTime = checkInTimeString,  // Use formatted string
+                                    checkInTime = checkInTimeString,
                                     workingHours = workingHours,
                                     attendance = attendanceStatus,
                                     status = statusText,
                                     onSuccess = {
-                                        // After successful save to daily_records, update real-time attendance
                                         coroutineScope.launch {
                                             org.example.employeeattendenceapp.Auth.updateEmployeeAttendance(
                                                 uid = uid,
@@ -636,7 +644,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                                 day = formattedDay,
                                                 latitude = latitude,
                                                 longitude = longitude,
-                                                checkInTime = checkInTimeString,  // Use formatted string
+                                                checkInTime = checkInTimeString,
                                                 workingHours = "0h 0m 0s",
                                                 attendance = "Absent",
                                                 status = "--"
@@ -644,24 +652,25 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
                                             // Reset the ViewModel state
                                             attendanceViewModel.resetForNewDay()
-                                            snackbarHostState.showSnackbar("Signed off successfully! Data saved.")
+                                            attendanceViewModel.showSnackbar("Signed off successfully! Data saved.")
                                         }
                                     },
                                     onError = { error ->
                                         coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Daily record error: $error")
+                                            attendanceViewModel.showSnackbar("Daily record error: $error")
                                             Log.e("SignOff", "Daily record save failed: $error")
                                         }
                                     }
                                 )
                             } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Sign-off failed: ${e.localizedMessage}")
+                                attendanceViewModel.showSnackbar("Sign-off failed: ${e.localizedMessage}")
                                 Log.e("SignOff", "Error during sign-off", e)
                             }
                         }
                     },
                     withinZoneVisible = withinZoneVisible && isInOfficeZone && locationServicesEnabled && internetConnected,
-                    locationServicesEnabled = locationServicesEnabled
+                    locationServicesEnabled = locationServicesEnabled,
+                    attendanceViewModel = attendanceViewModel
                 )
 
                 // Today's Stats Card
@@ -901,11 +910,9 @@ private fun MarkAttendanceCard(
     onMarkAttendance: () -> Unit,
     onSignOff: () -> Unit,
     withinZoneVisible: Boolean,
-    locationServicesEnabled: Boolean
+    locationServicesEnabled: Boolean,
+    attendanceViewModel: EmployeeAttendanceViewModel
 ) {
-    val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
     var isSignedOff by remember { mutableStateOf(false) }
 
     Card(
@@ -920,25 +927,13 @@ private fun MarkAttendanceCard(
             Button(
                 onClick = {
                     if (!internetConnected) {
-                        // Show snackbar for no internet
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("No internet connection")
-                        }
+                        attendanceViewModel.showSnackbar("No internet connection")
                     } else if (!locationServicesEnabled) {
-                        // Show snackbar for location disabled
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Location services disabled")
-                        }
+                        attendanceViewModel.showSnackbar("Location services disabled")
                     } else if (!isOfficeTime) {
-                        // Show snackbar for outside office hours
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Outside office hours")
-                        }
+                        attendanceViewModel.showSnackbar("Outside office hours")
                     } else if (!isInOfficeZone) {
-                        // Show snackbar for outside office zone
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Not in office zone")
-                        }
+                        attendanceViewModel.showSnackbar("Not in office zone")
                     } else {
                         onMarkAttendance()
                     }
@@ -1016,14 +1011,6 @@ private fun MarkAttendanceCard(
                 }
             }
         }
-    }
-
-    // Snackbar host for this card
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        SnackbarHost(hostState = snackbarHostState)
     }
 }
 
