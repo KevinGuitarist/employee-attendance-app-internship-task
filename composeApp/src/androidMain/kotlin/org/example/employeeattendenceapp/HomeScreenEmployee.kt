@@ -52,7 +52,6 @@ import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.google.android.gms.location.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.example.employeeattendenceapp.Auth.clearUserRole
@@ -86,6 +85,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val attendanceMarkedTime by attendanceViewModel.attendanceMarkedTime.collectAsState()
     val showSnackbar by attendanceViewModel.showSnackbar.collectAsState()
     val snackbarMessage by attendanceViewModel.snackbarMessage.collectAsState()
+    val isTrackingActive by attendanceViewModel.isTrackingActive.collectAsState()
 
     // Handle snackbar display
     LaunchedEffect(showSnackbar) {
@@ -299,7 +299,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     var internetConnected by remember { mutableStateOf(true) }
 
     LaunchedEffect(internetConnected) {
-        attendanceState.setInternetConnected(internetConnected)
+        attendanceViewModel.setInternetConnected(internetConnected)
+        attendanceViewModel.updateInternetStatus(internetConnected)
     }
 
 
@@ -372,7 +373,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     // Clear location if services are off
     LaunchedEffect(locationServicesEnabled) {
-        attendanceState.setLocationEnabled(locationServicesEnabled)
+        attendanceViewModel.setLocationEnabled(locationServicesEnabled)
+        attendanceViewModel.updateLocationServicesStatus(locationServicesEnabled)
     }
 
     // Clear location if internet is off
@@ -435,31 +437,45 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     }
 
     // Update working hours
-    LaunchedEffect(now) {
-        val checkInTime = attendanceViewModel.checkInTime.value
-        if (checkInTime != null && now.isAfter(checkInTime)) {
-            attendanceViewModel.updateWorkingHours(now, isInOfficeZone)
+    LaunchedEffect(now, isTrackingActive) {
+        if (isTrackingActive) {
+            attendanceViewModel.updateWorkingHours(now)
         } else {
-            // Reset to zero if timing is invalid
-            attendanceViewModel.setWorkingHours("0h 0m 0s")
+            // Even when not tracking, we need to update to handle pause/resume logic
+            attendanceViewModel.updateWorkingHours(now)
         }
     }
 
     // Real-time status update
-    LaunchedEffect(isInOfficeZone, isOfficeTime, internetConnected, locationServicesEnabled) {
+    LaunchedEffect(isInOfficeZone, isOfficeTime, internetConnected, locationServicesEnabled, isTrackingActive) {
+        attendanceViewModel.updateOfficeZoneStatus(isInOfficeZone)
+        attendanceViewModel.updateInternetStatus(internetConnected)
+        attendanceViewModel.updateLocationServicesStatus(locationServicesEnabled)
+
         when {
             !internetConnected -> attendanceViewModel.setStatusDash()
             !locationServicesEnabled -> attendanceViewModel.setStatusDash()
             attendanceViewModel.isAttendanceMarkedToday() -> {
                 attendanceViewModel.setStatusPresent()
-                if (isInOfficeZone && isOfficeTime) attendanceViewModel.setStatusActive() else attendanceViewModel.setStatusDash()
+                if (isInOfficeZone && isOfficeTime && isTrackingActive) {
+                    attendanceViewModel.setStatusActive()
+                } else {
+                    attendanceViewModel.setStatusDash()
+                }
             }
             !isOfficeTime -> {
                 attendanceViewModel.setStatusAbsent()
                 attendanceViewModel.setStatusDash()
             }
-            isInOfficeZone && isOfficeTime -> attendanceViewModel.setStatusActive()
+            isInOfficeZone && isOfficeTime && isTrackingActive -> attendanceViewModel.setStatusActive()
             else -> attendanceViewModel.setStatusDash()
+        }
+    }
+
+    LaunchedEffect(isTrackingActive) {
+        if (isTrackingActive) {
+            // Update working hours immediately when tracking resumes
+            attendanceViewModel.updateWorkingHours(LocalTime.now())
         }
     }
 
@@ -476,13 +492,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     LaunchedEffect(
         userName, formattedDate, formattedDay, checkInTime,
-        workingHours, attendanceStatus, statusText
+        workingHours, attendanceStatus, statusText, isTrackingActive
     ) {
         if (uid.isNotEmpty() && internetConnected) {
-            // Convert LocalTime to String for Firebase
             val checkInTimeString = checkInTime?.format(timeFormatter) ?: "Not Marked"
 
-            // Only update if this is a user-initiated action, not background data
             if (checkInTimeString != "Background Update" &&
                 workingHours != "Background Update" &&
                 attendanceStatus != "Background Update") {
@@ -491,10 +505,11 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     "name" to userName,
                     "date" to formattedDate,
                     "day" to formattedDay,
-                    "checkInTime" to checkInTimeString,  // Use the formatted string
+                    "checkInTime" to checkInTimeString,
                     "workingHours" to workingHours,
                     "attendance" to attendanceStatus,
                     "status" to statusText,
+                    "trackingActive" to isTrackingActive, // Add tracking status
                     "lastUpdated" to System.currentTimeMillis(),
                     "updateSource" to "foreground"
                 )
@@ -504,6 +519,21 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     .addOnFailureListener { e ->
                         Log.e("FirebaseUpdate", "Failed to update attendance: ${e.message}")
                     }
+            }
+        }
+    }
+
+    // Auto-resume tracking when conditions are restored
+    LaunchedEffect(isInOfficeZone, internetConnected, locationServicesEnabled) {
+        if (isInOfficeZone && internetConnected && locationServicesEnabled &&
+            attendanceViewModel.isAttendanceMarkedToday() && !isTrackingActive) {
+            // Small delay to ensure stable connection
+            delay(2000)
+            if (isInOfficeZone && internetConnected && locationServicesEnabled) {
+                attendanceViewModel.resumeTracking()
+
+                // Force an immediate update of working hours
+                attendanceViewModel.updateWorkingHours(LocalTime.now())
             }
         }
     }
@@ -645,9 +675,9 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                                 latitude = latitude,
                                                 longitude = longitude,
                                                 checkInTime = checkInTimeString,
-                                                workingHours = "0h 0m 0s",
-                                                attendance = "Absent",
-                                                status = "--"
+                                                workingHours = workingHours, // Send actual working hours, not "0h 0m 0s"
+                                                attendance = "Present", // Keep as Present since they worked
+                                                status = statusText
                                             )
 
                                             // Reset the ViewModel state
