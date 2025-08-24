@@ -1,7 +1,9 @@
 package org.example.employeeattendenceapp.data.model
 
 import java.util.*
+import com.google.firebase.database.IgnoreExtraProperties
 
+@IgnoreExtraProperties
 data class Task(
     val id: String = "",
     val employeeId: String = "",
@@ -16,6 +18,9 @@ data class Task(
     val employeeResponse: String = "",
     val lastUpdated: String = ""
 ) {
+    // Add this empty constructor for Firebase
+    constructor() : this("", "", "", "", "", "", "", "", "", "Pending", "", "")
+
     companion object {
         fun getStatusOptions(): List<String> {
             return listOf("Pending", "In Progress", "Completed")

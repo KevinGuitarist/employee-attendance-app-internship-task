@@ -36,6 +36,8 @@ import org.example.employeeattendenceapp.Auth.clearUserRole
 import org.example.employeeattendenceapp.Auth.signOut
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Send
 import com.google.firebase.auth.FirebaseAuth
@@ -52,7 +54,14 @@ import java.util.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.firebase.database.FirebaseDatabase
 import org.example.employeeattendenceapp.Auth.getDailyRecord
-import androidx.compose.material3.SegmentedButton
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.SemanticsProperties.ImeAction
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.text.input.ImeAction
 
 @Composable
 actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
@@ -514,7 +523,13 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                                         .indexOfFirst { it.first == name }
                                         .takeIf { it >= 0 }
                                         ?.let { index ->
-                                            Pair("", name) // Placeholder - need proper implementation
+                                            // Get the actual employee ID from the attendance data
+                                            val employeeId = recentAttendanceList.getOrNull(index)?.let {
+                                                // You need to store the actual employee ID somewhere
+                                                // For now, let's use the name as ID since that's what's in your database
+                                                name.replaceFirstChar { it.uppercaseChar() }
+                                            } ?: name.replaceFirstChar { it.uppercaseChar() }
+                                            Pair(employeeId, name)
                                         }
                                     showTaskDialog = true
                                 }
@@ -555,18 +570,19 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                         }
                     }
                 }
-                if (showTaskDialog && selectedEmployee != null) {
-                    EmployeeTaskDialog(
-                        employeeId = selectedEmployee!!.first,
-                        employeeName = selectedEmployee!!.second,
-                        viewModel = taskViewModel,
-                        onDismiss = {
-                            showTaskDialog = false
-                            selectedEmployee = null
-                        }
-                    )
-                }
-            }
+                if (showTaskDialog) {
+                    selectedEmployee?.let { employee ->
+                        EmployeeTaskDialog(
+                            employeeId = employee.first,
+                            employeeName = employee.second,
+                            viewModel = taskViewModel,
+                            onDismiss = {
+                                showTaskDialog = false
+                                selectedEmployee = null
+                            }
+                        )
+                    }
+                }            }
 
             Text("Quick Actions", modifier = Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
@@ -794,8 +810,12 @@ fun EmployeeTaskDialog(
     var taskDescription by remember { mutableStateOf("") }
     var taskDueDate by remember { mutableStateOf("") }
 
+    val scrollState = rememberScrollState()
+    val configuration = LocalConfiguration.current
+    val keyboardOpened = remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
     // State for employee attendance details
-    var employeeAttendance by remember { mutableStateOf<Map<String, Any>?>(null) }
     var selectedDate by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
     var isLoadingAttendance by remember { mutableStateOf(false) }
 
@@ -808,7 +828,6 @@ fun EmployeeTaskDialog(
         isLoadingAttendance = true
 
         if (dataSource == "realtime") {
-            // Fetch real-time attendance only when realtime is selected
             val attendanceRef = FirebaseDatabase.getInstance().getReference("attendance/$selectedDate/$employeeId")
             val attendanceListener = object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
@@ -826,7 +845,6 @@ fun EmployeeTaskDialog(
                 attendanceRef.removeEventListener(attendanceListener)
             }
         } else {
-            // Fetch daily record only when saved is selected
             getDailyRecord(
                 date = selectedDate,
                 uid = employeeId,
@@ -840,11 +858,9 @@ fun EmployeeTaskDialog(
                     isLoadingAttendance = false
                 }
             )
-
-            onDispose {
-                // No listener to remove for daily records
-            }
         }
+
+        onDispose {}
     }
 
     // Determine which data to display
@@ -854,26 +870,44 @@ fun EmployeeTaskDialog(
         else -> null
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text("Employee: $employeeName")
-                // Add data source selector
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .heightIn(max = configuration.screenHeightDp.dp - 32.dp),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(scrollState)
+            ) {
+                // Header
+                Text(
+                    "Employee: $employeeName",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Data source selector
                 Row(
-                    modifier = Modifier.padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     Text("Data source:", modifier = Modifier.padding(end = 8.dp))
                     Row {
-                        // Live button
                         FilterChip(
                             selected = dataSource == "realtime",
                             onClick = { dataSource = "realtime" },
                             label = { Text("Live") },
                             modifier = Modifier.padding(end = 8.dp)
                         )
-                        // Saved button
                         FilterChip(
                             selected = dataSource == "daily",
                             onClick = { dataSource = "daily" },
@@ -881,10 +915,7 @@ fun EmployeeTaskDialog(
                         )
                     }
                 }
-            }
-        },
-        text = {
-            Column {
+
                 // Date selector
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -951,7 +982,6 @@ fun EmployeeTaskDialog(
                                 Text(displayData["location"]?.toString() ?: "--")
                             }
 
-                            // Show data source indicator
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 text = if (dataSource == "daily") "✓ Saved record (final)" else "● Live data (updating)",
@@ -978,12 +1008,28 @@ fun EmployeeTaskDialog(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
+                val focusManager = LocalFocusManager.current
+
                 OutlinedTextField(
                     value = taskTitle,
                     onValueChange = { taskTitle = it },
-                    label = { Text("Task Title") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Task Title *") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                coroutineScope.launch {
+                                    delay(300)
+                                    scrollState.animateScrollTo(400)
+                                }
+                            }
+                        },
+                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next),                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedTextField(
                     value = taskDescription,
@@ -992,60 +1038,102 @@ fun EmployeeTaskDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(100.dp)
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                coroutineScope.launch {
+                                    delay(300)
+                                    scrollState.animateScrollTo(500)
+                                }
+                            }
+                        },
+                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next), keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    ),
+                    singleLine = false,
+                    maxLines = 3
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedTextField(
                     value = taskDueDate,
                     onValueChange = { taskDueDate = it },
-                    label = { Text("Due Date (YYYY-MM-DD)") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Due Date (YYYY-MM-DD) *") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                coroutineScope.launch {
+                                    delay(300)
+                                    scrollState.animateScrollTo(600)
+                                }
+                            }
+                        },
+                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next),
+                    keyboardActions = KeyboardActions(
+                        onDone = { focusManager.clearFocus() }
+                    )
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Existing Tasks List
                 if (uiState.employeeTasks.isNotEmpty()) {
                     Text("Existing Tasks:", style = MaterialTheme.typography.titleMedium)
-                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .heightIn(max = 200.dp)
+                            .padding(vertical = 8.dp)
+                    ) {
                         items(uiState.employeeTasks.size) { index ->
                             val task = uiState.employeeTasks[index]
                             TaskItem(task = task)
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    viewModel.assignTask(
-                        adminId = FirebaseAuth.getInstance().currentUser?.uid ?: "",
-                        adminName = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@") ?: "Admin",
-                        employeeId = employeeId,
-                        employeeName = employeeName,
-                        title = taskTitle,
-                        description = taskDescription,
-                        dueDate = taskDueDate,
-                        onComplete = { result ->
-                            if (result.isSuccess) {
-                                taskTitle = ""
-                                taskDescription = ""
-                                taskDueDate = ""
-                            }
-                        }
-                    )
-                },
-                enabled = taskTitle.isNotEmpty() && taskDueDate.isNotEmpty()
-            ) {
-                Icon(Icons.Default.Send, contentDescription = "Assign")
-                Spacer(Modifier.width(8.dp))
-                Text("Assign Task")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Buttons at the bottom
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.assignTask(
+                                adminId = FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                                adminName = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@") ?: "Admin",
+                                employeeId = employeeId,  // Use the employeeId parameter passed to the dialog
+                                employeeName = employeeName,  // Use the employeeName parameter passed to the dialog
+                                title = taskTitle,
+                                description = taskDescription,
+                                dueDate = taskDueDate,
+                                onComplete = { result ->
+                                    if (result.isSuccess) {
+                                        taskTitle = ""
+                                        taskDescription = ""
+                                        taskDueDate = ""
+                                    }
+                                }
+                            )
+                        },
+                        enabled = taskTitle.isNotEmpty() && taskDueDate.isNotEmpty()
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = "Assign")
+                        Spacer(Modifier.width(8.dp))
+                        Text("Assign Task")
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
