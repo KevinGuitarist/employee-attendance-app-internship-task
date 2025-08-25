@@ -1,5 +1,7 @@
 package org.example.employeeattendenceapp.viewmodels
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -51,8 +53,15 @@ class EmployeeAttendanceViewModel @Inject constructor() : ViewModel() {
         _showSnackbar.value = false
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun markAttendance() {
         val currentTime = LocalTime.now()
+        // RESET all tracking variables first
+        _accumulatedWorkingHours.value = java.time.Duration.ZERO
+        _lastPauseTime.value = null
+        _lastCheckInTime.value = null
+
+        // THEN set new values
         _checkInTime.value = currentTime
         _lastCheckInTime.value = currentTime
         _attendanceMarked.value = true
@@ -60,7 +69,7 @@ class EmployeeAttendanceViewModel @Inject constructor() : ViewModel() {
         _attendanceStatus.value = "Present"
         _lastAttendanceDay.value = LocalDate.now()
         _isTrackingActive.value = true
-        _workingHours.value = "0h 0m 0s"
+        _workingHours.value = "0h 0m 0s" // Explicitly reset to zero
     }
 
     fun isAttendanceMarkedToday(): Boolean {

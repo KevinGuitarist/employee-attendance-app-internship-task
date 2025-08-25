@@ -650,7 +650,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     return@launch
                                 }
 
-                                // Convert LocalTime to formatted String for Firebase
                                 val checkInTimeString = checkInTime?.let { time ->
                                     val formatter = java.time.format.DateTimeFormatter.ofPattern("hh:mm a", java.util.Locale.US)
                                     time.format(formatter)
@@ -675,12 +674,12 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                                 latitude = latitude,
                                                 longitude = longitude,
                                                 checkInTime = checkInTimeString,
-                                                workingHours = workingHours, // Send actual working hours, not "0h 0m 0s"
-                                                attendance = "Present", // Keep as Present since they worked
+                                                workingHours = workingHours,
+                                                attendance = "Present",
                                                 status = statusText
                                             )
 
-                                            // Reset the ViewModel state
+                                            // PROPERLY RESET THE VIEWMODEL STATE AFTER SIGNOFF
                                             attendanceViewModel.resetForNewDay()
                                             attendanceViewModel.showSnackbar("Signed off successfully! Data saved.")
                                         }
