@@ -1,5 +1,6 @@
 package org.example.employeeattendenceapp.viewmodels
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,10 +31,17 @@ class TaskAdminViewModel @Inject constructor(
 
     fun loadTasksForEmployee(employeeId: String) {
         viewModelScope.launch {
-            taskRepository.getTasksForEmployee(employeeId)
-                .collect { tasks ->
-                    _uiState.update { it.copy(employeeTasks = tasks) }
+            Log.d("TaskAdminViewModel", "Loading tasks for employee ID: $employeeId")
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                taskRepository.getTasksForEmployee(employeeId).collect { tasks ->
+                    Log.d("TaskAdminViewModel", "Received ${tasks.size} tasks")
+                    _uiState.update { it.copy(employeeTasks = tasks, isLoading = false) }
                 }
+            } catch (e: Exception) {
+                Log.e("TaskAdminViewModel", "Error loading tasks", e)
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
+            }
         }
     }
 
@@ -50,8 +58,11 @@ class TaskAdminViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
+                // Ensure employee ID is stored with proper case
+                val formattedEmployeeId = employeeId.replaceFirstChar { it.uppercaseChar() }
+
                 val task = Task.createNewTask(
-                    employeeId = employeeId,
+                    employeeId = formattedEmployeeId, // Use formatted ID
                     employeeName = employeeName,
                     adminId = adminId,
                     adminName = adminName,
