@@ -1,29 +1,59 @@
-# Employee Attendance App
+# Employee Attendance System
 
-A cross-platform Employee Attendance Management app built using **Kotlin Multiplatform** with a shared UI using **Jetpack Compose Multiplatform**.
+A professional cross-platform Employee Attendance Management app built using **Kotlin Multiplatform** with **Jetpack Compose Multiplatform**, featuring automated CI/CD deployment.
+
+## 🚀 Live Demo
+
+**Download the latest APK:**  
+📲 [https://kevinguitarist.github.io/employee-attendance-app-internship-task/](https://kevinguitarist.github.io/employee-attendance-app-internship-task/)
 
 ## ✨ Features
-- Shared codebase across **Android**, **iOS**, **Web**, **Desktop**, and **Server (Ktor)**.
-- Compose-based UI for all platforms.
-- Attendance marking, employee profiles, and status tracking.
-- Scalable architecture using Kotlin Multiplatform best practices.
+
+- **Multiplatform Support**: Shared codebase across Android, iOS, Web, Desktop, and Server
+- **Modern UI**: Jetpack Compose for beautiful, consistent interfaces on all platforms
+- **Real-time Tracking**: Background location services for accurate attendance marking
+- **Secure Authentication**: Firebase Auth with secure user management
+- **Cloud Sync**: Firebase Realtime Database for seamless data synchronization
+- **Professional CI/CD**: Automated builds, signing, and deployment
 
 ## 🛠 Tech Stack
-- **Kotlin Multiplatform**
-- **Jetpack Compose Multiplatform**
-- **Ktor** for backend/server
-- **Kotlin/Wasm** for web frontend
 
-## 🚀 Platforms Supported
-- ✅ Android  
-- ✅ iOS  
-- ✅ Desktop (Windows/macOS/Linux)  
-- ✅ Web (via Kotlin/Wasm - Alpha)  
-- ✅ Server (Ktor-based API)
+- **Kotlin Multiplatform** - Shared business logic
+- **Jetpack Compose Multiplatform** - Unified UI across platforms
+- **Firebase Authentication** - Secure user management
+- **Firebase Realtime Database** - Cloud data synchronization
+- **Hilt** - Dependency injection
+- **Background Location Services** - Accurate attendance tracking
+- **GitHub Actions** - Automated CI/CD pipeline
+- **GitHub Pages** - Professional APK distribution
 
-## 🧪 Testing
-Unit testing support included with shared logic coverage.
+## 📦 Automated Deployment
 
----
+This project features a complete CI/CD pipeline:
 
-> This is a personal/company project aimed at building a scalable, maintainable, and modern employee attendance system using Kotlin Multiplatform capabilities.
+- ✅ **Automatic Builds**: Triggered on every push to main branch
+- ✅ **Signed Releases**: Secure APK signing with GitHub Secrets
+- ✅ **Version Management**: Automatic version tracking on website
+- ✅ **Professional Website**: Automated deployment to GitHub Pages
+- ✅ **Secure Distribution**: HTTPS-enabled download portal
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Android Studio Arctic Fox or later
+- Kotlin 1.9.0+
+- Android SDK 31+
+
+### Installation
+1. Download the latest APK from my [website](https://kevinguitarist.github.io/employee-attendance-app-internship-task/)
+2. Enable "Install from unknown sources" if prompted
+3. Install and launch the application
+4. Sign in with your credentials
+
+### For Developers
+```bash
+# Clone the repository
+git clone https://github.com/kevinguitarist/employee-attendance-app-internship-task.git
+
+# Open in Android Studio
+# Build and run on your preferred platform
