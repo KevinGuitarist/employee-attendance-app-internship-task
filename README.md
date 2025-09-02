@@ -49,11 +49,3 @@ This project features a complete CI/CD pipeline:
 2. Enable "Install from unknown sources" if prompted
 3. Install and launch the application
 4. Sign in with your credentials
-
-### For Developers
-```bash
-# Clone the repository
-git clone https://github.com/kevinguitarist/employee-attendance-app-internship-task.git
-
-# Open in Android Studio
-# Build and run on your preferred platform
