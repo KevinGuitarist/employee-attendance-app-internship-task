@@ -12,6 +12,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Get current date
+      id: date
+      run: echo "date=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+
+    - name: Extract version info
+      id: version
+      run: |
+        VERSION_CODE=$(grep 'versionCode' composeApp/build.gradle.kts | awk '{print $3}')
+        VERSION_NAME=$(grep 'versionName' composeApp/build.gradle.kts | awk -F\" '{print $2}')
+        echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+        echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+    - name: Update HTML with version info
+      run: |
+        sed -i "s/{{VERSION_NAME}}/${{ steps.version.outputs.version_name }}/g" website/index.html
+        sed -i "s/{{VERSION_CODE}}/${{ steps.version.outputs.version_code }}/g" website/index.html
+        sed -i "s/{{BUILD_DATE}}/${{ steps.date.outputs.date }}/g" website/index.html
+
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
@@ -36,25 +54,7 @@ jobs:
 
     - name: Copy APK to website directory
       run: cp composeApp/build/outputs/apk/release/composeApp-release.apk website/employee-attendance-system.apk
-
-    - name: Get current date
-      id: date
-      run: echo "date=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
-
-    - name: Extract version info
-      id: version
-      run: |
-        VERSION_CODE=$(grep 'versionCode' composeApp/build.gradle.kts | awk '{print $3}')
-        VERSION_NAME=$(grep 'versionName' composeApp/build.gradle.kts | awk -F\" '{print $2}')
-        echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
-        echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
-
-    - name: Update HTML with version info
-      run: |
-        sed -i "s/{{VERSION_NAME}}/${{ steps.version.outputs.version_name }}/g" website/index.html
-        sed -i "s/{{VERSION_CODE}}/${{ steps.version.outputs.version_code }}/g" website/index.html
-        sed -i "s/{{BUILD_DATE}}/${{ steps.date.outputs.date }}/g" website/index.html
-
+        
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
