@@ -35,7 +35,7 @@ jobs:
       run: mkdir -p website
 
     - name: Copy APK to website directory
-      run: cp app/build/outputs/apk/release/app-release.apk website/employee-attendance-system.apk
+      run: cp composeApp/build/outputs/apk/release/composeApp-release.apk website/employee-attendance-system.apk
 
     - name: Get current date
       id: date
@@ -44,8 +44,8 @@ jobs:
     - name: Extract version info
       id: version
       run: |
-        VERSION_CODE=$(grep 'versionCode' app/build.gradle.kts | awk '{print $3}')
-        VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | awk -F\" '{print $2}')
+        VERSION_CODE=$(grep 'versionCode' composeApp/build.gradle.kts | awk '{print $3}')
+        VERSION_NAME=$(grep 'versionName' composeApp/build.gradle.kts | awk -F\" '{print $2}')
         echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
         echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
 
