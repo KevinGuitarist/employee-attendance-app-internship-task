@@ -45,14 +45,10 @@ class TaskRepository @Inject constructor(
     }
 
     fun getTasksForEmployee(employeeId: String): Flow<List<Task>> = callbackFlow {
-        // Convert email prefix to match the case used in database
-        // The issue: employeeId comes as lowercase (e.g., "employee1")
-        // but in database it's stored with first letter uppercase (e.g., "Employee1")
-        val dbEmployeeId = employeeId.replaceFirstChar { it.uppercaseChar() }
+        // Remove the case conversion here since it's now handled in ViewModel
+        Log.d("TaskRepository", "Querying tasks for employee: $employeeId")
 
-        Log.d("TaskRepository", "Querying tasks for employee: $dbEmployeeId")
-
-        val query = tasksRef.orderByChild("employeeId").equalTo(dbEmployeeId)
+        val query = tasksRef.orderByChild("employeeId").equalTo(employeeId)
 
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {

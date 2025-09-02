@@ -31,10 +31,14 @@ class TaskAdminViewModel @Inject constructor(
 
     fun loadTasksForEmployee(employeeId: String) {
         viewModelScope.launch {
-            Log.d("TaskAdminViewModel", "Loading tasks for employee ID: $employeeId")
+            Log.d("TaskAdminViewModel", "Loading tasks for employee: $employeeId")
             _uiState.update { it.copy(isLoading = true) }
             try {
-                taskRepository.getTasksForEmployee(employeeId).collect { tasks ->
+                // Convert to LOWERCASE to match how tasks are stored
+                val dbEmployeeId = employeeId.lowercase()
+                Log.d("TaskAdminViewModel", "Querying with formatted ID: $dbEmployeeId")
+
+                taskRepository.getTasksForEmployee(dbEmployeeId).collect { tasks ->
                     Log.d("TaskAdminViewModel", "Received ${tasks.size} tasks")
                     _uiState.update { it.copy(employeeTasks = tasks, isLoading = false) }
                 }
@@ -58,11 +62,11 @@ class TaskAdminViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Ensure employee ID is stored with proper case
-                val formattedEmployeeId = employeeId.replaceFirstChar { it.uppercaseChar() }
+                // Store employee ID in LOWERCASE for consistent querying
+                val formattedEmployeeId = employeeId.lowercase()
 
                 val task = Task.createNewTask(
-                    employeeId = formattedEmployeeId, // Use formatted ID
+                    employeeId = formattedEmployeeId, // Use lowercase ID
                     employeeName = employeeName,
                     adminId = adminId,
                     adminName = adminName,
