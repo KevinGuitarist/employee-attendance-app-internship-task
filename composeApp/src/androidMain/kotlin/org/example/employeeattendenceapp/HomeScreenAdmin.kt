@@ -89,7 +89,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         currentUser?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: "Admin"
     }
 
-    var selectedEmployee by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var selectedEmployeeForTask by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     var notifications by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var showNotifications by remember { mutableStateOf(false) }
@@ -215,7 +215,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             ))
 
                             // Store both UID and display name
-                            selectedEmployee = Pair(userId, displayName)
+                            selectedEmployeeForTask = Pair(userId, displayName)
                         }
                     }
 
@@ -242,7 +242,6 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
         })
 
         // Get today's attendance and recent records
-
         attendanceRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 try {
@@ -286,7 +285,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             ))
 
                             // Store both UID and display name
-                            selectedEmployee = Pair(userId, displayName)
+                            selectedEmployeeForTask = Pair(userId, displayName)
                         }
                     }
 
@@ -479,7 +478,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                 }
             }
 
-            // Recent Attendance
+// Recent Attendance
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -504,11 +503,10 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                         modifier = Modifier.padding(16.dp)
                     )
                 } else {
-                    // Determine which list to display based on showAllEmployees state
                     val displayList = if (showAllEmployees) {
-                        recentAttendanceList  // Show all employees
+                        recentAttendanceList
                     } else {
-                        recentAttendanceList.takeLast(4)  // Show only last 4
+                        recentAttendanceList.takeLast(4)
                     }
 
                     displayList.forEach { (name, time, status) ->
@@ -518,19 +516,9 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                                 .clickable {
-                                    // Find the matching employee in our stored pairs
-                                    selectedEmployee = recentAttendanceList
-                                        .indexOfFirst { it.first == name }
-                                        .takeIf { it >= 0 }
-                                        ?.let { index ->
-                                            // Get the actual employee ID from the attendance data
-                                            val employeeId = recentAttendanceList.getOrNull(index)?.let {
-                                                // You need to store the actual employee ID somewhere
-                                                // For now, let's use the name as ID since that's what's in your database
-                                                name.replaceFirstChar { it.uppercaseChar() }
-                                            } ?: name.replaceFirstChar { it.uppercaseChar() }
-                                            Pair(employeeId, name)
-                                        }
+                                    // Find the employee ID from Firebase data
+                                    val employeeId = name.replaceFirstChar { it.uppercaseChar() }
+                                    selectedEmployeeForTask = Pair(employeeId, name)
                                     showTaskDialog = true
                                 }
                         ) {
@@ -570,19 +558,21 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                         }
                     }
                 }
-                if (showTaskDialog) {
-                    selectedEmployee?.let { employee ->
-                        EmployeeTaskDialog(
-                            employeeId = employee.first,
-                            employeeName = employee.second,
-                            viewModel = taskViewModel,
-                            onDismiss = {
-                                showTaskDialog = false
-                                selectedEmployee = null
-                            }
-                        )
-                    }
-                }            }
+            }
+
+            if (showTaskDialog) {
+                selectedEmployeeForTask?.let { employee ->
+                    EmployeeTaskDialog(
+                        employeeId = employee.first,
+                        employeeName = employee.second,
+                        viewModel = taskViewModel,
+                        onDismiss = {
+                            showTaskDialog = false
+                            selectedEmployeeForTask = null
+                        }
+                    )
+                }
+            }
 
             Text("Quick Actions", modifier = Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 

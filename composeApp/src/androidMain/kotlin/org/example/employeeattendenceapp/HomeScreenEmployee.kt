@@ -662,7 +662,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                     day = formattedDay,
                                     checkInTime = checkInTimeString,
                                     workingHours = workingHours,
-                                    attendance = attendanceStatus,
+                                    attendance = attendanceStatus, // Use actual attendance status
                                     status = statusText,
                                     onSuccess = {
                                         coroutineScope.launch {
@@ -675,7 +675,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                                 longitude = longitude,
                                                 checkInTime = checkInTimeString,
                                                 workingHours = workingHours,
-                                                attendance = "Present",
+                                                attendance = attendanceStatus, // Use actual attendance status
                                                 status = statusText
                                             )
 
