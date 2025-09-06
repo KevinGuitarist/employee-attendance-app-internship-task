@@ -193,8 +193,8 @@ fun updateEmployeeAttendance(
     attendance: String,
     status: String
 ) {
-    val officeLat = 13.0175493
-    val officeLon = 77.6301157
+    val officeLat = 13.0175493 //28.556180
+    val officeLon = 77.6301157 //77.442370
     val locationStatus = if (latitude != null && longitude != null) {
         val dist = FloatArray(1)
         android.location.Location.distanceBetween(latitude, longitude, officeLat, officeLon, dist)

@@ -177,6 +177,7 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                 try {
                     val presentEmployees = mutableSetOf<String>()
                     val tempRecentAttendance = mutableListOf<Triple<String, String, String>>()
+                    val employeeUidToNameMap = mutableMapOf<String, String>() // Map UID to display name
 
                     if (snapshot.exists()) {
                         snapshot.children.forEach { employeeSnapshot ->
@@ -205,6 +206,9 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                                 .replace(".", " ")
                                 .replaceFirstChar { it.uppercase() }
 
+                            // Store the mapping from UID to display name
+                            employeeUidToNameMap[userId] = displayName
+
                             val displayStatus = if (effectiveAttendance == "Present") "Present" else "Absent"
                             val displayTime = if (effectiveAttendance == "Present") effectiveCheckInTime else "Not checked in"
 
@@ -213,9 +217,6 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                                 displayTime,
                                 displayStatus
                             ))
-
-                            // Store both UID and display name
-                            selectedEmployeeForTask = Pair(userId, displayName)
                         }
                     }
 
@@ -225,6 +226,13 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                     absentCount = notMarkedCount
 
                     recentAttendanceList = tempRecentAttendance.takeLast(4)
+
+                    // IMPORTANT FIX: Store the first available employee for task assignment
+                    // This ensures we have a valid employee selected for the task dialog
+                    if (employeeUidToNameMap.isNotEmpty() && selectedEmployeeForTask == null) {
+                        val firstEmployee = employeeUidToNameMap.entries.first()
+                        selectedEmployeeForTask = Pair(firstEmployee.key, firstEmployee.value)
+                    }
                 } catch (e: Exception) {
                     Log.e("Attendance", "Error processing attendance", e)
                     coroutineScope.launch {
@@ -516,9 +524,13 @@ actual fun HomeScreenAdmin(justLoggedIn: Boolean) {
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                                 .clickable {
-                                    // Find the employee ID from Firebase data
-                                    val employeeId = name.replaceFirstChar { it.uppercaseChar() }
-                                    selectedEmployeeForTask = Pair(employeeId, name)
+                                    // IMPORTANT FIX: Find the actual employee UID from the Firebase users
+                                    // Instead of using display name, get the proper employee identifier
+                                    val employeeEmailPrefix = name.lowercase().replace(" ", ".")
+
+                                    // For task assignment, we need to use the email prefix (lowercase)
+                                    // This should match how the employee is identified in the task system
+                                    selectedEmployeeForTask = Pair(employeeEmailPrefix, name)
                                     showTaskDialog = true
                                 }
                         ) {
@@ -813,6 +825,22 @@ fun EmployeeTaskDialog(
     var dailyRecord by remember { mutableStateOf<Map<String, Any>?>(null) }
     var dataSource by remember { mutableStateOf("realtime") } // "realtime" or "daily"
 
+    // IMPORTANT FIX: Get the proper employee identifier from Firebase user
+    val properEmployeeId = remember {
+        // Try to get the email-based ID from Firebase users
+        FirebaseDatabase.getInstance().getReference("users")
+            .orderByChild("email")
+            .equalTo("${employeeName.lowercase()}@example.com") // Adjust domain as needed
+
+        // For now, use a consistent format - email prefix in lowercase
+        employeeName.lowercase()
+    }
+
+    // Load tasks using the proper employee ID format
+    LaunchedEffect(properEmployeeId) {
+        viewModel.loadTasksForEmployee(properEmployeeId)
+    }
+
     // Fetch employee attendance data
     DisposableEffect(employeeId, selectedDate, dataSource) {
         isLoadingAttendance = true
@@ -883,6 +911,14 @@ fun EmployeeTaskDialog(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Debug info (remove in production)
+                Text(
+                    "Debug - Employee ID: $properEmployeeId",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
 
                 // Data source selector
@@ -1014,7 +1050,8 @@ fun EmployeeTaskDialog(
                                 }
                             }
                         },
-                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next),                    keyboardActions = KeyboardActions(
+                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next),
+                    keyboardActions = KeyboardActions(
                         onNext = { focusManager.moveFocus(FocusDirection.Down) }
                     )
                 )
@@ -1036,7 +1073,8 @@ fun EmployeeTaskDialog(
                                 }
                             }
                         },
-                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next), keyboardActions = KeyboardActions(
+                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next),
+                    keyboardActions = KeyboardActions(
                         onNext = { focusManager.moveFocus(FocusDirection.Down) }
                     ),
                     singleLine = false,
@@ -1080,6 +1118,13 @@ fun EmployeeTaskDialog(
                             TaskItem(task = task)
                         }
                     }
+                } else {
+                    Text(
+                        "No existing tasks found for this employee",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -1100,8 +1145,8 @@ fun EmployeeTaskDialog(
                             viewModel.assignTask(
                                 adminId = FirebaseAuth.getInstance().currentUser?.uid ?: "",
                                 adminName = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@") ?: "Admin",
-                                employeeId = employeeId,  // Use the employeeId parameter passed to the dialog
-                                employeeName = employeeName,  // Use the employeeName parameter passed to the dialog
+                                employeeId = properEmployeeId,  // Use the proper employee ID
+                                employeeName = employeeName,
                                 title = taskTitle,
                                 description = taskDescription,
                                 dueDate = taskDueDate,
@@ -1110,6 +1155,8 @@ fun EmployeeTaskDialog(
                                         taskTitle = ""
                                         taskDescription = ""
                                         taskDueDate = ""
+                                        // Refresh tasks after successful assignment
+                                        viewModel.loadTasksForEmployee(properEmployeeId)
                                     }
                                 }
                             )

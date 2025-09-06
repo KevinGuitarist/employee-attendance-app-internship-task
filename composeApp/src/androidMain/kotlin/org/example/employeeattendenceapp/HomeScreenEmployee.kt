@@ -40,6 +40,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import android.provider.Settings
 import android.util.Log
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -104,8 +105,13 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
     val taskViewModel: TaskEmployeeViewModel = hiltViewModel()
     val employeeId = FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@")?.lowercase() ?: ""
+
+    val consistentEmployeeId = remember {
+        FirebaseAuth.getInstance().currentUser?.email?.substringBefore("@")?.lowercase() ?: ""
+    }
+
     LaunchedEffect(Unit) {
-        taskViewModel.loadTasksForEmployee(employeeId)
+        taskViewModel.loadTasksForEmployee(consistentEmployeeId)
     }
 
     if (showLocationSettingsDialog) {
@@ -407,8 +413,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val officeStartTime = LocalTime.of(9, 0)
     val officeEndTime = LocalTime.of(18, 0)
     val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) || now.isBefore(officeEndTime.plusNanos(1))
-    val officeLat = 13.0175493
-    val officeLon = 77.6301157
+    val officeLat = /*13.0175493*/ 28.556180
+    val officeLon = /*77.6301157*/77.442370
 
     // Helper to calculate distance between two lat/lon points
     fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
@@ -472,10 +478,18 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
         }
     }
 
+    LaunchedEffect(isAttendanceMarkedToday) {
+        if (isAttendanceMarkedToday) {
+            // Small delay to ensure Firebase has processed the attendance
+            delay(1000)
+            taskViewModel.loadTasksForEmployee(consistentEmployeeId)
+        }
+    }
+
     LaunchedEffect(isTrackingActive) {
-        if (isTrackingActive) {
-            // Update working hours immediately when tracking resumes
-            attendanceViewModel.updateWorkingHours(LocalTime.now())
+        if (isTrackingActive && isAttendanceMarkedToday) {
+            delay(500) // Small delay for stability
+            taskViewModel.loadTasksForEmployee(consistentEmployeeId)
         }
     }
 
@@ -635,6 +649,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                                 attendanceViewModel.showSnackbar("Marked at ${formattedTime ?: "unknown time"}")
                                 delay(3000)
                                 attendanceViewModel.resetZoneVisibility()
+
+                                // CRITICAL FIX: Reload tasks after attendance is marked
+                                delay(1000) // Give Firebase time to process
+                                taskViewModel.loadTasksForEmployee(consistentEmployeeId)
                             }
                         } catch (e: Exception) {
                             coroutineScope.launch {
@@ -717,12 +735,6 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "Your Tasks",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
                         EmployeeTaskView(
                             viewModel = taskViewModel,
                             modifier = Modifier.fillMaxWidth()
