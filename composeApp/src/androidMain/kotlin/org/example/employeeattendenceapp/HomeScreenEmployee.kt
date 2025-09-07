@@ -413,8 +413,8 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     val officeStartTime = LocalTime.of(9, 0)
     val officeEndTime = LocalTime.of(18, 0)
     val isOfficeTime = !now.isBefore(officeStartTime) && !now.isAfter(officeEndTime)
-    val officeLat = /*13.0175493*/ 28.556180
-    val officeLon = /*77.6301157*/77.442370
+    val officeLat = 13.0175493 /*28.556180*/
+    val officeLon = 77.6301157 /*77.442370*/
 
     // Helper to calculate distance between two lat/lon points
     fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
@@ -522,7 +522,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
                     "checkInTime" to checkInTimeString,
                     "workingHours" to workingHours,
                     "attendance" to attendanceStatus,
-                    "status" to statusText,
+                    "status" to if (isInOfficeZone && internetConnected && locationServicesEnabled) "In Office" else "Not in Office",
                     "trackingActive" to isTrackingActive, // Add tracking status
                     "lastUpdated" to System.currentTimeMillis(),
                     "updateSource" to "foreground"
@@ -722,10 +722,10 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
 
                 // Today's Stats Card
                 TodaysStatsCard(
-                    checkInTime = checkInTime?.format(timeFormatter) ?: "Not marked", // Pass formatted string
+                    checkInTime = checkInTime?.format(timeFormatter) ?: "Not marked",
                     workingHours = workingHours,
                     attendanceStatus = attendanceStatus,
-                    statusText = statusText
+                    statusText = if (isInOfficeZone && internetConnected && locationServicesEnabled) "In Office" else "Not in Office"
                 )
 
                 Card(
@@ -1117,6 +1117,9 @@ private fun StatRow(
             color = when {
                 isAttendance && value == "Present" -> Color(0xFF4B89DC)
                 isAttendance && value == "Absent" -> Color.Red
+                value == "In Office" -> Color(0xFF4CAF50)
+                value == "Not in Office" -> Color(0xFFF44336)
+                value == "--" -> Color.Gray
                 isActive -> Color(0xFF4B89DC)
                 else -> Color.Gray
             }
