@@ -412,7 +412,7 @@ actual fun HomeScreenEmployee(justLoggedIn: Boolean) {
     // Office hours and location
     val officeStartTime = LocalTime.of(9, 0)
     val officeEndTime = LocalTime.of(18, 0)
-    val isOfficeTime = now.isAfter(officeStartTime.minusNanos(1)) || now.isBefore(officeEndTime.plusNanos(1))
+    val isOfficeTime = !now.isBefore(officeStartTime) && !now.isAfter(officeEndTime)
     val officeLat = /*13.0175493*/ 28.556180
     val officeLon = /*77.6301157*/77.442370
 

@@ -242,6 +242,7 @@ fun saveDailyRecord(
         .getReference("daily_records")
         .child(date)
         .child(uid)
+    dailyRecordRef.keepSynced(true)
 
     val recordData = hashMapOf(
         "name" to name,
